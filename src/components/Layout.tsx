@@ -34,7 +34,7 @@ export default function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { id: "dashboard", label: "ပင်မစာမျက်နှာ", icon: LayoutDashboard },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "stock", label: "ဖုန်းလက်ကျန်စာရင်း", icon: Smartphone },
     { id: "sold", label: "အရောင်းမှတ်တမ်းများ", icon: Receipt },
     { id: "reports", label: "လစဉ်အစီရင်ခံစာများ", icon: BarChart3 },
@@ -46,10 +46,10 @@ export default function Layout({
       <aside className="hidden md:flex flex-col w-64 bg-slate-900 dark:bg-slate-950 text-slate-100 border-r border-slate-800/60 shrink-0">
         <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-800/60">
           <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-md shadow-indigo-600/20">
-            <Store className="h-5 w-5" />
+            <Smartphone className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-white text-sm tracking-tight">ဖုန်းဆိုင် POS စနစ်</h1>
+            <h1 className="font-display font-bold text-white text-sm tracking-tight">Ko Phyo Mobile Shop</h1>
             <p className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">စနစ်အဆင်သင့်ဖြစ်ပါသည်</p>
           </div>
         </div>
@@ -96,9 +96,9 @@ export default function Layout({
         <header className="md:hidden h-16 bg-slate-900 text-white border-b border-slate-800 flex items-center justify-between px-4 z-20">
           <div className="flex items-center gap-2">
             <div className="bg-indigo-600 text-white p-1.5 rounded-lg shadow-md shadow-indigo-600/10">
-              <Store className="h-4 w-4" />
+              <Smartphone className="h-4 w-4" />
             </div>
-            <span className="font-display font-bold text-sm text-white">ဖုန်းဆိုင် POS စနစ်</span>
+            <span className="font-display font-bold text-sm text-white">Ko Phyo Mobile Shop</span>
           </div>
 
           <div className="flex items-center gap-2">

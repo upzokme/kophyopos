@@ -83,7 +83,7 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
     <div className="space-y-8 font-sans">
       {/* Title Header */}
       <div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">ပင်မစာမျက်နှာ (Dashboard)</h2>
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">Dashboard</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">အရောင်းဆိုင်၏ အရောင်းလှုပ်ရှားမှုနှင့် ဖုန်းလက်ကျန်များ အချိန်နှင့်တပြေးညီ ခြုံငုံသုံးသပ်ချက်။</p>
       </div>
 
