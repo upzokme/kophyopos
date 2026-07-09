@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -26,8 +26,20 @@ interface StockViewProps {
   onAddPhone: (phone: Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }) => Promise<void>;
   onEditPhone: (id: string, phone: Partial<Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }>) => Promise<void>;
   onDeletePhone: (id: string) => Promise<void>;
-  onSellPhone: (phoneId: string, customerName: string, sellingPrice: number, saleDate: string) => Promise<void>;
+  onSellPhone: (
+    phoneId: string,
+    customerName: string,
+    customerPhone: string,
+    customerAddress: string,
+    hasCover: boolean,
+    hasScreenProtector: boolean,
+    hasCharger: boolean,
+    sellingPrice: number,
+    saleDate: string
+  ) => Promise<void>;
   onTriggerToast: (message: string, type: "success" | "error" | "info") => void;
+  autoOpenAdd: boolean;
+  onResetAutoOpen: () => void;
 }
 
 export default function StockView({
@@ -38,15 +50,52 @@ export default function StockView({
   onDeletePhone,
   onSellPhone,
   onTriggerToast,
+  autoOpenAdd,
+  onResetAutoOpen,
 }: StockViewProps) {
   // Available phones only
   const availablePhones = useMemo(() => {
     return phones.filter((p) => p.status === PhoneStatus.Available);
   }, [phones]);
 
-  // Search and Date Filter State
+  // Search and Date/Month Filter State
   const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "daily" | "monthly">("all");
   const [filterDate, setFilterDate] = useState("");
+  const now = useMemo(() => new Date(), []);
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 1-12
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  const months = [
+    { value: 1, label: "ဇန်နဝါရီ (January)" },
+    { value: 2, label: "ဖေဖော်ဝါရီ (February)" },
+    { value: 3, label: "မတ် (March)" },
+    { value: 4, label: "ဧပြီ (April)" },
+    { value: 5, label: "မေ (May)" },
+    { value: 6, label: "ဇွန် (June)" },
+    { value: 7, label: "ဇူလိုင် (July)" },
+    { value: 8, label: "ဩဂုတ် (August)" },
+    { value: 9, label: "စက်တင်ဘာ (September)" },
+    { value: 10, label: "အောက်တိုဘာ (October)" },
+    { value: 11, label: "နိုဝင်ဘာ (November)" },
+    { value: 12, label: "ဒီဇင်ဘာ (December)" },
+  ];
+
+  const years = useMemo(() => {
+    const phoneYears = phones.map((p) => {
+      if (!p.createdAt) return now.getFullYear();
+      return new Date(p.createdAt).getFullYear();
+    });
+    const allYears = [...phoneYears, now.getFullYear(), 2026];
+    const minYear = Math.min(...allYears.filter((y) => !isNaN(y)));
+    const maxYear = 2030; // support up to 2030
+    
+    const uniqueYears: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) {
+      uniqueYears.push(y);
+    }
+    return uniqueYears;
+  }, [phones, now]);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,6 +114,14 @@ export default function StockView({
 
   // Detail Pop-up Modal State
   const [selectedDetailPhone, setSelectedDetailPhone] = useState<Phone | null>(null);
+
+  // Secondary Password Verification State
+  const [secPasswordAction, setSecPasswordAction] = useState<{
+    type: "edit" | "delete";
+    phone: Phone;
+  } | null>(null);
+  const [secPasswordInput, setSecPasswordInput] = useState("");
+  const [secPasswordError, setSecPasswordError] = useState("");
 
   // Form Fields State
   const [brand, setBrand] = useState("");
@@ -103,6 +160,13 @@ export default function StockView({
     setFormError("");
     setFormOpen(true);
   };
+
+  useEffect(() => {
+    if (autoOpenAdd) {
+      openAddForm();
+      onResetAutoOpen();
+    }
+  }, [autoOpenAdd]);
 
   // Open Edit Form
   const openEditForm = (phone: Phone) => {
@@ -211,7 +275,7 @@ export default function StockView({
     setSellModalOpen(true);
   };
 
-  // Filtering Logic (Removed other filters, only searching by brand, model, or imei, and date)
+  // Filtering Logic (Search by brand, model, or imei, and date/month filters)
   const filteredAndSortedPhones = useMemo(() => {
     let result = [...availablePhones];
 
@@ -229,11 +293,17 @@ export default function StockView({
       });
     }
 
-    // Date Filter
-    if (filterDate) {
+    // Date / Month Filter
+    if (filterType === "daily" && filterDate) {
       result = result.filter((p) => {
         if (!p.createdAt) return false;
         return p.createdAt.substring(0, 10) === filterDate;
+      });
+    } else if (filterType === "monthly") {
+      result = result.filter((p) => {
+        if (!p.createdAt) return false;
+        const d = new Date(p.createdAt);
+        return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
       });
     }
 
@@ -241,7 +311,7 @@ export default function StockView({
     result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return result;
-  }, [availablePhones, search, filterDate]);
+  }, [availablePhones, search, filterType, filterDate, selectedMonth, selectedYear]);
 
   // Pagination Logic
   const totalItems = filteredAndSortedPhones.length;
@@ -257,9 +327,28 @@ export default function StockView({
     }
   };
 
-  const handleSellConfirm = async (customerName: string, sellingPrice: number, saleDate: string) => {
+  const handleSellConfirm = async (
+    customerName: string,
+    customerPhone: string,
+    customerAddress: string,
+    hasCover: boolean,
+    hasScreenProtector: boolean,
+    hasCharger: boolean,
+    sellingPrice: number,
+    saleDate: string
+  ) => {
     if (!selectedSellPhone) return;
-    await onSellPhone(selectedSellPhone.id, customerName, sellingPrice, saleDate);
+    await onSellPhone(
+      selectedSellPhone.id,
+      customerName,
+      customerPhone,
+      customerAddress,
+      hasCover,
+      hasScreenProtector,
+      hasCharger,
+      sellingPrice,
+      saleDate
+    );
     onTriggerToast(`${selectedSellPhone.brand} ${selectedSellPhone.model} အား ရောင်းချပြီးပါပြီ။`, "success");
   };
 
@@ -316,11 +405,11 @@ export default function StockView({
         </div>
       </div>
 
-      {/* Search & Date Filter bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
-        <div className="flex flex-col md:flex-row gap-4">
+      {/* Search & Filter Card */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Text Search input */}
-          <div className="relative flex-1">
+          <div className="relative lg:col-span-2">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
@@ -334,10 +423,58 @@ export default function StockView({
             />
           </div>
 
-          {/* Date Search input */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="relative w-full md:w-auto">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+          {/* Filter Type Toggle Button Tabs */}
+          <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl items-center border border-slate-200/40 dark:border-slate-800/30">
+            <button
+              onClick={() => {
+                setFilterType("all");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "all"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              အားလုံး
+            </button>
+            <button
+              onClick={() => {
+                setFilterType("daily");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "daily"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              နေ့အလိုက် (Daily)
+            </button>
+            <button
+              onClick={() => {
+                setFilterType("monthly");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "monthly"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              လအလိုက် (Monthly)
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Secondary Filters */}
+        {filterType === "daily" && (
+          <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-800/10 p-4 rounded-xl border border-slate-150 dark:border-slate-800/50 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">နေ့စွဲ ရွေးချယ်ရန်:</span>
+            </div>
+            <div className="relative flex-1 max-w-xs">
               <input
                 type="date"
                 value={filterDate}
@@ -345,7 +482,7 @@ export default function StockView({
                   setFilterDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="pl-9 pr-3 py-2.5 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 font-mono w-full md:w-48"
+                className="w-full pl-3 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 scheme-light dark:scheme-dark cursor-pointer"
               />
             </div>
             {filterDate && (
@@ -354,14 +491,70 @@ export default function StockView({
                   setFilterDate("");
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 bg-slate-200/60 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
               >
-                <X className="h-3.5 w-3.5" />
-                ပြန်စဥ်းမည်
+                ပြန်လည်သတ်မှတ်မည် (Reset)
               </button>
             )}
           </div>
-        </div>
+        )}
+
+        {filterType === "monthly" && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 bg-slate-50/60 dark:bg-slate-800/20 p-4.5 rounded-xl border border-slate-200/60 dark:border-slate-800/50 animate-fade-in">
+            <div className="flex items-center gap-2 shrink-0">
+              <Calendar className="h-4.5 w-4.5 text-indigo-500 dark:text-indigo-400" />
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">ရှာဖွေလိုသည့် လနှင့်ခုနှစ်ရွေးရန်:</span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
+              {/* Month Selection Dropdown */}
+              <div className="relative w-full sm:w-56">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-3.5 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-500 focus:border-transparent transition-all text-slate-900 dark:text-slate-100 cursor-pointer shadow-sm appearance-none"
+                >
+                  {months.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Year Selection Dropdown */}
+              <div className="relative w-full sm:w-40">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-3.5 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-500 focus:border-transparent transition-all text-slate-900 dark:text-slate-100 cursor-pointer shadow-sm appearance-none"
+                >
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {toMyanmarDigits(y)} ခုနှစ်
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -867,7 +1060,7 @@ export default function StockView({
                     onClick={() => {
                       const p = selectedDetailPhone;
                       setSelectedDetailPhone(null);
-                      openEditForm(p);
+                      setSecPasswordAction({ type: "edit", phone: p });
                     }}
                     className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
                   >
@@ -877,7 +1070,7 @@ export default function StockView({
                     onClick={() => {
                       const p = selectedDetailPhone;
                       setSelectedDetailPhone(null);
-                      setDeleteConfirmId(p.id);
+                      setSecPasswordAction({ type: "delete", phone: p });
                     }}
                     className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
                   >
@@ -886,6 +1079,91 @@ export default function StockView({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secondary Password Verification Dialog */}
+      {secPasswordAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-sans animate-fade-in">
+          <div
+            onClick={() => {
+              setSecPasswordAction(null);
+              setSecPasswordInput("");
+              setSecPasswordError("");
+            }}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+          />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-sm shadow-xl overflow-hidden z-10 p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 p-2 rounded-xl shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-slate-900 dark:text-white text-base font-display">Secondary Password လိုအပ်ပါသည်</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {secPasswordAction.type === "edit" ? "ပြင်ဆင်ခြင်း" : "ဖျက်သိမ်းခြင်း"} လုပ်ဆောင်ချက်အတွက် Secondary Password ဖြည့်သွင်းရန် လိုအပ်ပါသည်။
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (secPasswordInput === "#phyo2026@") {
+                  const targetPhone = secPasswordAction.phone;
+                  const type = secPasswordAction.type;
+                  setSecPasswordAction(null);
+                  setSecPasswordInput("");
+                  setSecPasswordError("");
+                  if (type === "edit") {
+                    openEditForm(targetPhone);
+                  } else {
+                    setDeleteConfirmId(targetPhone.id);
+                  }
+                } else {
+                  setSecPasswordError("Secondary Password မှားယွင်းနေပါသည်။");
+                }
+              }}
+              className="space-y-3"
+            >
+              <input
+                type="password"
+                required
+                autoFocus
+                placeholder="Secondary Password ထည့်ပါ"
+                value={secPasswordInput}
+                onChange={(e) => {
+                  setSecPasswordInput(e.target.value);
+                  setSecPasswordError("");
+                }}
+                className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
+              />
+
+              {secPasswordError && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{secPasswordError}</p>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecPasswordAction(null);
+                    setSecPasswordInput("");
+                    setSecPasswordError("");
+                  }}
+                  className="px-4 py-2 text-xs font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors text-slate-700 dark:text-slate-300 cursor-pointer"
+                >
+                  မလုပ်တော့ပါ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+                >
+                  အတည်ပြုမည်
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

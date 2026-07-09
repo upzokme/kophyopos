@@ -12,8 +12,12 @@ import ReportsView from "./components/ReportsView";
 import ToastContainer, { ToastMessage } from "./components/Toast";
 import { Phone, Sale, DashboardStats, BrandModelColorOptions } from "./types";
 import { RefreshCw } from "lucide-react";
+import LoginView from "./components/LoginView";
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem("phyo-mobile-pos-logged-in") === "true";
+  });
   const [activeTab, setActiveTab] = useState("dashboard");
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -26,6 +30,7 @@ export default function App() {
     models: [],
     colors: [],
   });
+  const [autoOpenAddPhone, setAutoOpenAddPhone] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -80,7 +85,9 @@ export default function App() {
 
   // Initial load
   useEffect(() => {
-    fetchAllData();
+    if (isLoggedIn) {
+      fetchAllData();
+    }
 
     // Set theme based on local storage or dark mode preference
     const storedTheme = localStorage.getItem("phone-pos-theme") as "light" | "dark" | null;
@@ -92,7 +99,7 @@ export default function App() {
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, [fetchAllData]);
+  }, [fetchAllData, isLoggedIn]);
 
   // Handle dark / light mode toggle
   const toggleTheme = () => {
@@ -155,11 +162,31 @@ export default function App() {
     await fetchAllData(true);
   };
 
-  const handleSellPhone = async (phoneId: string, customerName: string, sellingPrice: number, saleDate: string) => {
+  const handleSellPhone = async (
+    phoneId: string,
+    customerName: string,
+    customerPhone: string,
+    customerAddress: string,
+    hasCover: boolean,
+    hasScreenProtector: boolean,
+    hasCharger: boolean,
+    sellingPrice: number,
+    saleDate: string
+  ) => {
     const res = await fetch("/api/sales", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phoneId, customerName, sellingPrice, saleDate }),
+      body: JSON.stringify({
+        phoneId,
+        customerName,
+        customerPhone,
+        customerAddress,
+        hasCover,
+        hasScreenProtector,
+        hasCharger,
+        sellingPrice,
+        saleDate,
+      }),
     });
 
     if (!res.ok) {
@@ -189,12 +216,53 @@ export default function App() {
     }
   };
 
+  const handleResetAllData = async () => {
+    if (!window.confirm("သေချာပါသလား? ဖုန်းလက်ကျန်များ၊ အရောင်းမှတ်တမ်းများနှင့် လစဉ်အစီရင်ခံစာများ အားလုံး အပြီးတိုင် ပျက်ပြယ်သွားမည်ဖြစ်ပြီး ပြန်လည်ရယူနိုင်မည်မဟုတ်ပါ။")) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await fetch("/api/reset", { method: "POST" });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "ဒေတာဖျက်သိမ်းခြင်း မအောင်မြင်ပါ။");
+      }
+      addToast("စနစ်အတွင်းရှိ ဒေတာအားလုံးကို အောင်မြင်စွာ ဖျက်သိမ်းပြီးပါပြီ။", "success");
+      await fetchAllData();
+    } catch (err: any) {
+      addToast(err.message || "အမှားအယွင်း ဖြစ်ပေါ်ခဲ့ပါသည်။", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
+    localStorage.setItem("phyo-mobile-pos-logged-in", "true");
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem("phyo-mobile-pos-logged-in");
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        theme={theme}
+        toggleTheme={toggleTheme}
+      />
+    );
+  }
+
   return (
     <Layout
       activeTab={activeTab}
       setActiveTab={setActiveTab}
       theme={theme}
       toggleTheme={toggleTheme}
+      onLogout={handleLogout}
     >
       {loading ? (
         <div className="h-96 flex flex-col items-center justify-center gap-4 text-center">
@@ -211,6 +279,10 @@ export default function App() {
               stats={stats}
               recentSales={sales as any}
               setActiveTab={setActiveTab}
+              onAddPhoneClick={() => {
+                setActiveTab("stock");
+                setAutoOpenAddPhone(true);
+              }}
             />
           )}
 
@@ -223,6 +295,8 @@ export default function App() {
               onDeletePhone={handleDeletePhone}
               onSellPhone={handleSellPhone}
               onTriggerToast={addToast}
+              autoOpenAdd={autoOpenAddPhone}
+              onResetAutoOpen={() => setAutoOpenAddPhone(false)}
             />
           )}
 
@@ -231,7 +305,7 @@ export default function App() {
           )}
 
           {activeTab === "reports" && (
-            <ReportsView sales={sales as any} />
+            <ReportsView sales={sales as any} phones={phones} onResetData={handleResetAllData} />
           )}
         </>
       )}

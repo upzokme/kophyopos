@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React, { useMemo } from "react";
 import {
   Smartphone,
   CheckCircle,
@@ -17,6 +18,8 @@ import {
   DollarSign,
   ArrowRight,
   PackageCheck,
+  Plus,
+  BarChart3,
 } from "lucide-react";
 import { DashboardStats, Sale } from "../types.js";
 import { formatKyat, formatBurmeseDate, toMyanmarDigits } from "../utils.js";
@@ -25,12 +28,98 @@ interface DashboardViewProps {
   stats: DashboardStats;
   recentSales: (Sale & { brand: string; model: string; color: string; imei: string })[];
   setActiveTab: (tab: string) => void;
+  onAddPhoneClick: () => void;
 }
 
-export default function DashboardView({ stats, recentSales, setActiveTab }: DashboardViewProps) {
+export default function DashboardView({ stats, recentSales, setActiveTab, onAddPhoneClick }: DashboardViewProps) {
+  // Group sales chronologically by month
+  const monthlyData = useMemo(() => {
+    if (!recentSales || recentSales.length === 0) {
+      return [];
+    }
+
+    const parsedSales = recentSales
+      .map((s) => {
+        const d = new Date(s.saleDate);
+        return {
+          year: d.getFullYear(),
+          month: d.getMonth() + 1, // 1-12
+          sellingPrice: s.sellingPrice || 0,
+          profit: s.profit || 0,
+        };
+      })
+      .filter((s) => !isNaN(s.year));
+
+    if (parsedSales.length === 0) return [];
+
+    // Find the min year/month
+    let minYear = Math.min(...parsedSales.map((s) => s.year));
+    let minMonth = 12;
+    parsedSales.forEach((s) => {
+      if (s.year === minYear && s.month < minMonth) {
+        minMonth = s.month;
+      }
+    });
+
+    const now = new Date();
+    const maxYear = now.getFullYear();
+    const maxMonth = now.getMonth() + 1;
+
+    const periods: { year: number; month: number; label: string; revenue: number; profit: number }[] = [];
+    const englishMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    let curYear = minYear;
+    let curMonth = minMonth;
+
+    // Avoid infinite loop if somehow data is in the future
+    let limit = 0;
+    while ((curYear < maxYear || (curYear === maxYear && curMonth <= maxMonth)) && limit < 120) {
+      limit++;
+      const label = `${englishMonths[curMonth - 1]} ${toMyanmarDigits(curYear)}`;
+      
+      const monthSales = parsedSales.filter((s) => s.year === curYear && s.month === curMonth);
+      const revenue = monthSales.reduce((sum, s) => sum + s.sellingPrice, 0);
+      const profit = monthSales.reduce((sum, s) => sum + s.profit, 0);
+
+      periods.push({
+        year: curYear,
+        month: curMonth,
+        label,
+        revenue,
+        profit,
+      });
+
+      curMonth++;
+      if (curMonth > 12) {
+        curMonth = 1;
+        curYear++;
+      }
+    }
+
+    return periods;
+  }, [recentSales]);
+
+  const maxRevenue = useMemo(() => {
+    if (monthlyData.length === 0) return 100000;
+    const maxVal = Math.max(...monthlyData.map((d) => d.revenue), 100000);
+    return maxVal;
+  }, [monthlyData]);
+
+  const yTicks = useMemo(() => {
+    return [maxRevenue, maxRevenue * 0.75, maxRevenue * 0.5, maxRevenue * 0.25, 0];
+  }, [maxRevenue]);
+
+  const formatYAxis = (val: number) => {
+    if (val === 0) return "၀ ကျပ်";
+    if (val >= 100000) {
+      return `${toMyanmarDigits((val / 100000).toFixed(1).replace(".0", ""))} သိန်း`;
+    }
+    return `${toMyanmarDigits(val.toLocaleString())} ကျပ်`;
+  };
+
   const statCards = [
     {
-      title: "ဖုန်းစုစုပေါင်း",
+      title: "လက်ကျန်နှင့် ရောင်းပြီး စုစုပေါင်းဖုန်းအရေအတွက်",
       value: `${toMyanmarDigits(stats.totalPhones)} လုံး`,
       icon: Smartphone,
       color: "bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400",
@@ -38,20 +127,28 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
       tab: "stock",
     },
     {
-      title: "ရောင်းရန်ရှိသော လက်ကျန်",
+      title: "ကျန်ရှိသောဖုန်းအရေအတွက်",
       value: `${toMyanmarDigits(stats.availablePhones)} လုံး`,
       icon: CheckCircle,
       color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400",
-      description: "အရောင်းခန်းနှင့် စတိုတွင်ရှိသော ဖုန်းများ",
+      description: "ရောင်းရန်ကျန်ရှိသော ဖုန်းလက်ကျန်",
       tab: "stock",
     },
     {
-      title: "ရောင်းပြီးသော ဖုန်းများ",
+      title: "ရောင်းပြီးဖုန်းအရေအတွက်",
       value: `${toMyanmarDigits(stats.soldPhones)} လုံး`,
       icon: ShoppingBag,
-      color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+      color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400",
       description: "အောင်မြင်စွာ ရောင်းချပြီးစီးမှုများ",
       tab: "sold",
+    },
+    {
+      title: "ကျန်ရှိသောဝယ်ရင်ဈေး စုစုပေါင်းတန်ဖိုး",
+      value: formatKyat(stats.currentStockValue || 0),
+      icon: DollarSign,
+      color: "bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-400",
+      description: "လက်ကျန်ဖုန်းများ၏ ဝယ်ရင်းဈေး စုစုပေါင်းတန်ဖိုး",
+      tab: "stock",
     },
     {
       title: "ယနေ့ရောင်းရငွေ",
@@ -65,7 +162,7 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
       title: "ယခုလရောင်းရငွေ",
       value: formatKyat(stats.thisMonthSales),
       icon: DollarSign,
-      color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400",
+      color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
       description: "ယခုလအတွင်း စုစုပေါင်းရောင်းရငွေ",
       tab: "reports",
     },
@@ -82,13 +179,22 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
   return (
     <div className="space-y-8 font-sans">
       {/* Title Header */}
-      <div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">Dashboard</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">အရောင်းဆိုင်၏ အရောင်းလှုပ်ရှားမှုနှင့် ဖုန်းလက်ကျန်များ အချိန်နှင့်တပြေးညီ ခြုံငုံသုံးသပ်ချက်။</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">Dashboard</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">အရောင်းဆိုင်၏ အရောင်းလှုပ်ရှားမှုနှင့် ဖုန်းလက်ကျန်များ အချိန်နှင့်တပြေးညီ ခြုံငုံသုံးသပ်ချက်။</p>
+        </div>
+        <button
+          onClick={onAddPhoneClick}
+          className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white px-5 py-3 rounded-2xl text-sm font-semibold shadow-md shadow-indigo-600/10 cursor-pointer transition-all hover:shadow-lg hover:shadow-indigo-600/20 active:scale-95 self-start sm:self-auto shrink-0"
+        >
+          <Plus className="h-5 w-5" />
+          ဖုန်းအသစ်ထည့်မည်
+        </button>
       </div>
 
       {/* Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {statCards.map((card, idx) => {
           const Icon = card.icon;
           return (
@@ -112,6 +218,130 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
             </div>
           );
         })}
+      </div>
+
+      {/* Monthly Sales & Profit Candle Chart */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white font-display text-base flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
+              လစဉ် အရောင်းတိုးတက်မှုနှင့် အမြတ်ငွေပြဇယား
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              စတင်ရောင်းချသည့်လမှ နောက်ဆုံးလအထိ လစဉ် အရောင်းစွမ်းဆောင်ရည် ခြုံငုံသုံးသပ်ချက်
+            </p>
+          </div>
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-xs font-semibold">
+            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span className="w-3.5 h-3.5 bg-indigo-500/10 dark:bg-indigo-400/10 border-2 border-indigo-500/30 rounded" />
+              <span>ရောင်းရငွေ (Revenue)</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span className="w-3.5 h-3.5 bg-gradient-to-t from-emerald-500 to-emerald-400 rounded" />
+              <span>အမြတ်ငွေ (Profit)</span>
+            </div>
+          </div>
+        </div>
+
+        {monthlyData.length === 0 ? (
+          <div className="h-56 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-100 dark:border-slate-800/60 rounded-xl">
+            <BarChart3 className="h-10 w-10 text-slate-300 dark:text-slate-700 mb-2 animate-pulse" />
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">အရောင်းမှတ်တမ်းများ မရှိသေးပါ</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              ဖုန်းများကို ရောင်းချပြီးပါက လစဉ်အရောင်းတိုးတက်မှု ဇယားကို ဤနေရာတွင် အလိုအလျောက် ရေးဆွဲပြသပေးမည် ဖြစ်ပါသည်။
+            </p>
+          </div>
+        ) : (
+          <div className="flex h-72 gap-3 items-stretch mt-2">
+            {/* Y-Axis Labels */}
+            <div className="flex flex-col justify-between text-[10px] font-bold text-slate-400 dark:text-slate-500 pr-2 select-none h-[calc(100%-24px)] text-right w-16">
+              {yTicks.map((tick, i) => (
+                <span key={i} className="leading-none">{formatYAxis(tick)}</span>
+              ))}
+            </div>
+
+            {/* Chart Area */}
+            <div className="flex-1 relative h-full">
+              {/* Gridlines */}
+              <div className="absolute inset-0 flex flex-col justify-between h-[calc(100%-24px)] pointer-events-none">
+                {yTicks.map((_, i) => (
+                  <div
+                    key={i}
+                    className="border-b border-slate-100 dark:border-slate-800/40 w-full first:border-t-0 last:border-b-2 last:border-slate-300 dark:last:border-slate-700"
+                  />
+                ))}
+              </div>
+
+              {/* Scrollable Bar Columns container */}
+              <div className="absolute inset-0 flex items-stretch justify-between pl-2 overflow-x-auto scrollbar-thin pb-1">
+                <div className="flex items-end justify-between w-full h-[calc(100%-24px)] gap-1 md:gap-2">
+                  {monthlyData.map((data, index) => {
+                    const revenuePercent = (data.revenue / maxRevenue) * 100;
+                    const profitPercent = (data.profit / maxRevenue) * 100;
+
+                    return (
+                      <div
+                        key={index}
+                        className="flex flex-col items-center group relative min-w-[55px] sm:min-w-[70px] flex-grow h-full justify-end"
+                      >
+                        {/* Tooltip Card (Centered above the bar) */}
+                        <div className="absolute z-30 bottom-full mb-3.5 hidden group-hover:flex flex-col bg-slate-900/95 dark:bg-black/95 text-white text-xs rounded-xl p-3 shadow-xl border border-slate-700/40 min-w-[180px] animate-fade-in pointer-events-none transition-all">
+                          <div className="font-bold text-slate-200 border-b border-slate-700/60 pb-1 mb-1.5 text-center">
+                            {data.label}
+                          </div>
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex justify-between gap-3 text-slate-300">
+                              <span>ရောင်းရငွေ:</span>
+                              <span className="font-bold text-indigo-400">{formatKyat(data.revenue)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3 text-slate-300">
+                              <span>အမြတ်ငွေ:</span>
+                              <span className="font-bold text-emerald-400">+{formatKyat(data.profit)}</span>
+                            </div>
+                            {data.revenue > 0 && (
+                              <div className="flex justify-between gap-3 text-slate-300 pt-1.5 mt-0.5 border-t border-slate-800">
+                                <span>အမြတ်နှုန်း:</span>
+                                <span className="font-extrabold text-amber-400">
+                                  {toMyanmarDigits(((data.profit / data.revenue) * 100).toFixed(0))}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          {/* Tooltip Arrow */}
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900/95 dark:border-t-black/95"></div>
+                        </div>
+
+                        {/* The Candle / Bar container */}
+                        <div className="relative w-8 sm:w-11 h-full flex items-end justify-center">
+                          {/* Revenue Bar */}
+                          <div
+                            style={{ height: `${Math.max(revenuePercent, 2)}%` }}
+                            className="absolute bottom-0 w-full bg-indigo-500/10 dark:bg-indigo-400/10 hover:bg-indigo-500/20 dark:hover:bg-indigo-400/20 rounded-t-lg transition-all duration-300 border border-indigo-500/15 dark:border-indigo-400/15"
+                          />
+
+                          {/* Profit Bar (Solid inside) */}
+                          {data.profit > 0 && (
+                            <div
+                              style={{ height: `${Math.max(profitPercent, 2)}%` }}
+                              className="absolute bottom-0 w-4 sm:w-6 bg-gradient-to-t from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 dark:from-emerald-600 dark:to-emerald-500 rounded-t-md transition-all duration-300 shadow-md shadow-emerald-500/10"
+                            />
+                          )}
+                        </div>
+
+                        {/* Bottom X-Axis Label */}
+                        <div className="absolute top-full mt-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                          {data.label.split(" ")[0]}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Recent Sales List */}
@@ -164,8 +394,16 @@ export default function DashboardView({ stats, recentSales, setActiveTab }: Dash
                       <div className="font-semibold text-sm text-slate-900 dark:text-white">
                         {sale.brand} {sale.model}
                       </div>
-                      <div className="text-xs font-mono text-slate-400 dark:text-slate-500 mt-0.5">
-                        IMEI: {sale.imei}
+                      <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5 font-medium">
+                        <span className="font-mono">IMEI: {sale.imei}</span>
+                        {sale.customerName && (
+                          <>
+                            <span>·</span>
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-sans text-[10px]">
+                              ဝယ်သူ: {sale.customerName}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td className="py-3.5 text-sm text-slate-500 dark:text-slate-400 font-medium">

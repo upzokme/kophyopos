@@ -36,13 +36,53 @@ interface SoldViewProps {
 
 export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
   const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "daily" | "monthly">("all");
   const [selectedDate, setSelectedDate] = useState("");
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 1-12
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [currentPage, setCurrentPage] = useState(1);
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const [selectedDetailSale, setSelectedDetailSale] = useState<SoldPhone | null>(null);
+
+  // Secondary Password Verification State
+  const [secPasswordAction, setSecPasswordAction] = useState<{
+    type: "cancel-sale";
+    saleId: string;
+  } | null>(null);
+  const [secPasswordInput, setSecPasswordInput] = useState("");
+  const [secPasswordError, setSecPasswordError] = useState("");
+
+  const months = [
+    { value: 1, label: "ဇန်နဝါရီ (January)" },
+    { value: 2, label: "ဖေဖော်ဝါရီ (February)" },
+    { value: 3, label: "မတ် (March)" },
+    { value: 4, label: "ဧပြီ (April)" },
+    { value: 5, label: "မေ (May)" },
+    { value: 6, label: "ဇွန် (June)" },
+    { value: 7, label: "ဇူလိုင် (July)" },
+    { value: 8, label: "ဩဂုတ် (August)" },
+    { value: 9, label: "စက်တင်ဘာ (September)" },
+    { value: 10, label: "အောက်တိုဘာ (October)" },
+    { value: 11, label: "နိုဝင်ဘာ (November)" },
+    { value: 12, label: "ဒီဇင်ဘာ (December)" },
+  ];
+
+  const years = useMemo(() => {
+    const saleYears = sales.map((s) => new Date(s.saleDate).getFullYear());
+    const allYears = [...saleYears, now.getFullYear(), 2026];
+    const minYear = Math.min(...allYears.filter((y) => !isNaN(y)));
+    const maxYear = 2030; // support up to 2030
+    
+    const uniqueYears: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) {
+      uniqueYears.push(y);
+    }
+    return uniqueYears;
+  }, [sales, now]);
   const itemsPerPage = 8;
 
-  // Filter sold history by IMEI, Model, or Sale Date (Calendar)
+  // Filter sold history by Search, and Daily / Monthly constraints
   const filteredSales = useMemo(() => {
     let result = [...sales];
 
@@ -54,16 +94,22 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
           combined.includes(q) ||
           sale.brand.toLowerCase().includes(q) ||
           sale.model.toLowerCase().includes(q) ||
-          sale.imei.toLowerCase().includes(q)
+          sale.imei.toLowerCase().includes(q) ||
+          (sale.customerName && sale.customerName.toLowerCase().includes(q))
         );
       });
     }
 
-    if (selectedDate) {
+    if (filterType === "daily" && selectedDate) {
       result = result.filter((sale) => {
         const d = new Date(sale.saleDate);
         const yyyymmdd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         return yyyymmdd === selectedDate;
+      });
+    } else if (filterType === "monthly") {
+      result = result.filter((sale) => {
+        const d = new Date(sale.saleDate);
+        return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
       });
     }
 
@@ -71,7 +117,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
     result.sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
 
     return result;
-  }, [sales, search, selectedDate]);
+  }, [sales, search, filterType, selectedDate, selectedMonth, selectedYear]);
 
   // Pagination Logic
   const totalItems = filteredSales.length;
@@ -120,30 +166,78 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
         </div>
       </div>
 
-      {/* Filters (Search & Calendar) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Search Input */}
-        <div className="md:col-span-2 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-sm flex items-center">
-          <div className="relative w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <input
-              type="text"
-              placeholder="တံဆိပ်၊ မော်ဒယ် သို့မဟုတ် IMEI ဘားကုဒ်ဖြင့် ရှာဖွေရန်..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+      {/* Search and Filters Card (Daily & Monthly Searching) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Search Input */}
+          <div className="md:col-span-2 relative flex items-center">
+            <div className="relative w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <input
+                type="text"
+                placeholder="တံဆိပ်၊ မော်ဒယ်၊ IMEI သို့မဟုတ် ဝယ်သူအမည်ဖြင့် ရှာဖွေရန်..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
+              />
+            </div>
+          </div>
+
+          {/* Filter Type Toggle Button Tabs */}
+          <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl items-center border border-slate-200/40 dark:border-slate-800/30">
+            <button
+              onClick={() => {
+                setFilterType("all");
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
-            />
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "all"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              အားလုံး
+            </button>
+            <button
+              onClick={() => {
+                setFilterType("daily");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "daily"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              နေ့အလိုက် (Daily)
+            </button>
+            <button
+              onClick={() => {
+                setFilterType("monthly");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                filterType === "monthly"
+                  ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              လအလိုက် (Monthly)
+            </button>
           </div>
         </div>
 
-        {/* Calendar Picker */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-sm flex items-center">
-          <div className="relative w-full flex items-center gap-2">
-            <div className="relative flex-1">
-              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+        {/* Dynamic Secondary Filters */}
+        {filterType === "daily" && (
+          <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-800/10 p-4 rounded-xl border border-slate-150 dark:border-slate-800/50 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">နေ့စွဲ ရွေးချယ်ရန်:</span>
+            </div>
+            <div className="relative flex-1 max-w-xs">
               <input
                 type="date"
                 value={selectedDate}
@@ -151,7 +245,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                   setSelectedDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 scheme-light dark:scheme-dark cursor-pointer"
+                className="w-full pl-3 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 scheme-light dark:scheme-dark cursor-pointer"
               />
             </div>
             {selectedDate && (
@@ -160,14 +254,70 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                   setSelectedDate("");
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
-                title="ရက်စွဲ စစ်ထုတ်မှုကို ပယ်ဖျက်ရန်"
+                className="px-3 py-2 bg-slate-200/60 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
               >
-                အားလုံးပြန်ပြရန်
+                ပြန်လည်သတ်မှတ်မည် (Reset)
               </button>
             )}
           </div>
-        </div>
+        )}
+
+        {filterType === "monthly" && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 bg-slate-50/60 dark:bg-slate-800/20 p-4.5 rounded-xl border border-slate-200/60 dark:border-slate-800/50 animate-fade-in">
+            <div className="flex items-center gap-2 shrink-0">
+              <Calendar className="h-4.5 w-4.5 text-indigo-500 dark:text-indigo-400" />
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">ရှာဖွေလိုသည့် လနှင့်ခုနှစ်ရွေးရန်:</span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
+              {/* Month Selection Dropdown */}
+              <div className="relative w-full sm:w-56">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-3.5 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-500 focus:border-transparent transition-all text-slate-900 dark:text-slate-100 cursor-pointer shadow-sm appearance-none"
+                >
+                  {months.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Year Selection Dropdown */}
+              <div className="relative w-full sm:w-40">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-3.5 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-500 focus:border-transparent transition-all text-slate-900 dark:text-slate-100 cursor-pointer shadow-sm appearance-none"
+                >
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {toMyanmarDigits(y)} ခုနှစ်
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
@@ -202,13 +352,13 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                         <div className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {sale.brand} {sale.model}
                         </div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 font-medium">
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 flex flex-wrap items-center gap-1 sm:gap-2 font-medium">
                           <span>အရောင်: {sale.color}</span>
                           {sale.customerName && (
                             <>
                               <span className="hidden sm:inline">·</span>
-                              <span className="text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                                ဝယ်သူ: {sale.customerName}
+                              <span className="text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-sans">
+                                ဝယ်သူ: {sale.customerName} {sale.customerPhone ? `(${sale.customerPhone})` : ""}
                               </span>
                             </>
                           )}
@@ -348,7 +498,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* Sold Phone Info */}
               <div>
                 <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
@@ -360,16 +510,67 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1.5 font-medium">
                     <span>အရောင်: {selectedDetailSale.color}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Contact & Address Info */}
+              {(selectedDetailSale.customerName || selectedDetailSale.customerPhone || selectedDetailSale.customerAddress) && (
+                <div>
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1 font-sans">
+                    ဝယ်သူ အချက်အလက် (Customer Details)
+                  </span>
+                  <div className="bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800/50 p-3.5 rounded-xl space-y-2 text-xs">
                     {selectedDetailSale.customerName && (
-                      <>
-                        <span>·</span>
-                        <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-sans text-slate-700 dark:text-slate-300">
-                          ဝယ်သူ: {selectedDetailSale.customerName}
-                        </span>
-                      </>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 dark:text-slate-500 font-sans">ဝယ်သူအမည်:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 font-sans">{selectedDetailSale.customerName}</span>
+                      </div>
+                    )}
+                    {selectedDetailSale.customerPhone && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 dark:text-slate-500 font-sans">ဖုန်းနံပတ်:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 font-sans">{selectedDetailSale.customerPhone}</span>
+                      </div>
+                    )}
+                    {selectedDetailSale.customerAddress && (
+                      <div className="flex items-start justify-between">
+                        <span className="text-slate-400 dark:text-slate-500 font-sans">နေရပ်လိပ်စာ:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 text-right max-w-[200px] break-words font-sans">{selectedDetailSale.customerAddress}</span>
+                      </div>
                     )}
                   </div>
                 </div>
+              )}
+
+              {/* Free Gifts / Accessories */}
+              <div>
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1 font-sans">
+                  ထည့်ပေးလိုက်သည့် လက်ဆောင်ပစ္စည်းများ
+                </span>
+                {(selectedDetailSale.hasCover || selectedDetailSale.hasScreenProtector || selectedDetailSale.hasCharger) ? (
+                  <div className="bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800/50 p-3 rounded-xl flex flex-wrap gap-2">
+                    {selectedDetailSale.hasCover && (
+                      <span className="bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-indigo-100 dark:border-indigo-900/30">
+                        Cover ဖုန်းခွံ
+                      </span>
+                    )}
+                    {selectedDetailSale.hasScreenProtector && (
+                      <span className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-emerald-100 dark:border-emerald-900/30">
+                        မှန်ကပ်
+                      </span>
+                    )}
+                    {selectedDetailSale.hasCharger && (
+                      <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-100 dark:border-amber-900/30">
+                        Charger
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800/50 p-3 rounded-xl text-xs text-slate-400 dark:text-slate-500 font-medium font-sans">
+                    လက်ဆောင် ထည့်သွင်းပေးထားခြင်း မရှိပါ။
+                  </div>
+                )}
               </div>
 
               {/* IMEI */}
@@ -438,7 +639,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                     onClick={() => {
                       const id = selectedDetailSale.id;
                       setSelectedDetailSale(null);
-                      setCancelConfirmId(id);
+                      setSecPasswordAction({ type: "cancel-sale", saleId: id });
                     }}
                     className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-extrabold rounded-xl transition-all shadow-sm cursor-pointer text-center font-sans"
                   >
@@ -447,6 +648,86 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secondary Password Verification Dialog */}
+      {secPasswordAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-sans animate-fade-in">
+          <div
+            onClick={() => {
+              setSecPasswordAction(null);
+              setSecPasswordInput("");
+              setSecPasswordError("");
+            }}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+          />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-sm shadow-xl overflow-hidden z-10 p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 p-2 rounded-xl shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-slate-900 dark:text-white text-base font-display">Secondary Password လိုအပ်ပါသည်</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  အရောင်းပယ်ဖျက်ခြင်း လုပ်ဆောင်ချက်အတွက် Secondary Password ဖြည့်သွင်းရန် လိုအပ်ပါသည်။
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (secPasswordInput === "#phyo2026@") {
+                  const targetSaleId = secPasswordAction.saleId;
+                  setSecPasswordAction(null);
+                  setSecPasswordInput("");
+                  setSecPasswordError("");
+                  setCancelConfirmId(targetSaleId);
+                } else {
+                  setSecPasswordError("Secondary Password မှားယွင်းနေပါသည်။");
+                }
+              }}
+              className="space-y-3"
+            >
+              <input
+                type="password"
+                required
+                autoFocus
+                placeholder="Secondary Password ထည့်ပါ"
+                value={secPasswordInput}
+                onChange={(e) => {
+                  setSecPasswordInput(e.target.value);
+                  setSecPasswordError("");
+                }}
+                className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
+              />
+
+              {secPasswordError && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{secPasswordError}</p>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecPasswordAction(null);
+                    setSecPasswordInput("");
+                    setSecPasswordError("");
+                  }}
+                  className="px-4 py-2 text-xs font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors text-slate-700 dark:text-slate-300 cursor-pointer"
+                >
+                  မလုပ်တော့ပါ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+                >
+                  အတည်ပြုမည်
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

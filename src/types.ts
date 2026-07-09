@@ -26,6 +26,11 @@ export interface Sale {
   id: string;
   phoneId: string;
   customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  hasCover?: boolean;
+  hasScreenProtector?: boolean;
+  hasCharger?: boolean;
   sellingPrice: number; // Must be >= 0
   profit: number;       // sellingPrice - buyPrice
   saleDate: string;     // ISO date string
@@ -38,6 +43,7 @@ export interface DashboardStats {
   todaySales: number;       // total revenue of today's sales
   thisMonthSales: number;   // total revenue of this month's sales
   thisMonthProfit: number;  // total profit of this month's sales
+  currentStockValue: number; // total buyPrice value of available phones
 }
 
 export interface MonthlyReport {

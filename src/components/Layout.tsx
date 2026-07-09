@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Store,
+  LogOut,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -21,6 +22,7 @@ interface LayoutProps {
   setActiveTab: (tab: string) => void;
   theme: "light" | "dark";
   toggleTheme: () => void;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
@@ -29,9 +31,11 @@ export default function Layout({
   setActiveTab,
   theme,
   toggleTheme,
+  onLogout,
   children,
 }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -73,6 +77,16 @@ export default function Layout({
               </button>
             );
           })}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 mt-4 border border-rose-950/20"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              လော့ဂ်အောက်ထွက်ရန်
+            </button>
+          )}
         </nav>
 
         {/* Sidebar Footer */}
@@ -142,6 +156,19 @@ export default function Layout({
                   </button>
                 );
               })}
+
+              {onLogout && (
+                <button
+                  onClick={() => {
+                    onLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-rose-400 hover:bg-rose-950/20 mt-4 border border-rose-950/20"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  လော့ဂ်အောက်ထွက်ရန်
+                </button>
+              )}
             </nav>
           </div>
         )}

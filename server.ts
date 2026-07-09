@@ -135,7 +135,7 @@ async function startServer() {
   // 7. POST create a sale (sell a phone)
   app.post("/api/sales", (req, res) => {
     try {
-      const { phoneId, customerName, sellingPrice, saleDate } = req.body;
+      const { phoneId, customerName, customerPhone, customerAddress, hasCover, hasScreenProtector, hasCharger, sellingPrice, saleDate } = req.body;
       const parsedSellingPrice = parseFloat(sellingPrice);
 
       if (isNaN(parsedSellingPrice)) {
@@ -144,6 +144,11 @@ async function startServer() {
 
       const result = db.sellPhone(phoneId, {
         customerName: customerName?.trim() || undefined,
+        customerPhone: customerPhone?.trim() || undefined,
+        customerAddress: customerAddress?.trim() || undefined,
+        hasCover: !!hasCover,
+        hasScreenProtector: !!hasScreenProtector,
+        hasCharger: !!hasCharger,
         sellingPrice: parsedSellingPrice,
         saleDate,
       });
@@ -193,6 +198,16 @@ async function startServer() {
       res.json(report);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch report" });
+    }
+  });
+
+  // 10. POST clear all database data (reset)
+  app.post("/api/reset", (req, res) => {
+    try {
+      db.clearAllData();
+      res.json({ success: true, message: "Database wiped and reset successfully" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to reset database" });
     }
   });
 

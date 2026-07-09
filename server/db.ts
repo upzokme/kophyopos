@@ -132,8 +132,8 @@ class DatabaseManager {
 
       if (!fs.existsSync(DB_FILE)) {
         this.cache = {
-          phones: SEED_PHONES,
-          sales: SEED_SALES,
+          phones: [],
+          sales: [],
         };
         this.saveToDisk();
       } else {
@@ -143,10 +143,114 @@ class DatabaseManager {
         if (!this.cache.phones) this.cache.phones = [];
         if (!this.cache.sales) this.cache.sales = [];
       }
+
+      // Automatically seed April, May, June, July data if empty
+      this.seedBurmeseMarketData();
     } catch (err) {
       console.error("Failed to initialize database:", err);
-      this.cache = { phones: SEED_PHONES, sales: SEED_SALES };
+      this.cache = { phones: [], sales: [] };
     }
+  }
+
+  public clearAllData(): void {
+    this.cache = {
+      phones: [],
+      sales: [],
+    };
+    this.saveToDisk();
+  }
+
+  private seedBurmeseMarketData() {
+    // If we already have phones, don't auto-seed on start so we don't duplicate or overwrite
+    if (this.cache.phones.length > 0) {
+      return;
+    }
+
+    console.log("Seeding Burmese Market Data for April, May, June, and July...");
+
+    const phoneModels = [
+      { brand: "Apple", model: "iPhone 15 Pro Max", color: "Natural Titanium", ram: "8GB", storage: "256GB", buyPrice: 4500000, sellPrice: 5100000 },
+      { brand: "Apple", model: "iPhone 15 Pro", color: "Blue Titanium", ram: "8GB", storage: "256GB", buyPrice: 4000000, sellPrice: 4550000 },
+      { brand: "Apple", model: "iPhone 15", color: "Black", ram: "6GB", storage: "128GB", buyPrice: 3200000, sellPrice: 3650000 },
+      { brand: "Apple", model: "iPhone 14 Pro Max", color: "Deep Purple", ram: "6GB", storage: "256GB", buyPrice: 3500000, sellPrice: 4000000 },
+      { brand: "Samsung", model: "Galaxy S24 Ultra", color: "Titanium Gray", ram: "12GB", storage: "512GB", buyPrice: 4800000, sellPrice: 5400000 },
+      { brand: "Samsung", model: "Galaxy S24+", color: "Onyx Black", ram: "12GB", storage: "256GB", buyPrice: 3600000, sellPrice: 4100000 },
+      { brand: "Samsung", model: "Galaxy A55", color: "Awesome Iceblue", ram: "8GB", storage: "128GB", buyPrice: 1500000, sellPrice: 1750000 },
+      { brand: "Xiaomi", model: "Redmi Note 13 Pro", color: "Ocean Teal", ram: "8GB", storage: "256GB", buyPrice: 950000, sellPrice: 1150000 },
+      { brand: "Oppo", model: "Reno 11 Pro", color: "Pearl White", ram: "12GB", storage: "512GB", buyPrice: 1600000, sellPrice: 1850000 },
+      { brand: "Vivo", model: "V30", color: "Peacock Green", ram: "12GB", storage: "256GB", buyPrice: 1400000, sellPrice: 1620000 },
+    ];
+
+    const customerNames = [
+      "Ko Min Khant", "Ma Honey Htun", "Ko Kyaw Zin Latt", "Ma Yoon Thiri", "Ko Aung Myo Thu",
+      "Ma Su Myat Sandar", "Ko Myo Min Oo", "Ma Khin Thida", "Ko Zin Ko Htet", "Ma Ei Phyu",
+      "Ko Phyo Wai Aung", "Ma May Thu", "U Kyaw Kyaw", "Daw Nu Nu", "Ko Sai Lu", "Ma Nan Shwe"
+    ];
+
+    const targetYear = 2026;
+
+    // April (3): 10 phones, 5 sold, 5 available
+    // May (4): 10 phones, 5 sold, 5 available
+    // June (5): 10 phones, 5 sold, 5 available
+    // July (6): 5 phones, 3 sold, 2 available
+    const config = [
+      { month: 3, totalPhones: 10, soldPhones: 5, days: 30 },
+      { month: 4, totalPhones: 10, soldPhones: 5, days: 31 },
+      { month: 5, totalPhones: 10, soldPhones: 5, days: 30 },
+      { month: 6, totalPhones: 5, soldPhones: 3, days: 31 },
+    ];
+
+    config.forEach(({ month, totalPhones, soldPhones, days }) => {
+      for (let i = 1; i <= totalPhones; i++) {
+        const templateIdx = (month * 17 + i) % phoneModels.length;
+        const temp = phoneModels[templateIdx];
+        const custIdx = (month * 11 + i) % customerNames.length;
+
+        const imei = `358912${month}${String(i).padStart(3, "0")}${100000 + Math.floor(Math.random() * 900000)}`;
+        const isSold = i <= soldPhones;
+        const status = isSold ? PhoneStatus.Sold : PhoneStatus.Available;
+
+        // Distribute dates across the month
+        const day = Math.floor(((i - 1) * days) / totalPhones) + 1;
+        const hour = 10 + (i % 8);
+        const minute = (i * 13) % 60;
+        const dateStr = new Date(targetYear, month, day, hour, minute, 0).toISOString();
+
+        const phoneId = `p_seeded_${month}_${i}`;
+
+        const newPhone: Phone = {
+          id: phoneId,
+          brand: temp.brand,
+          model: temp.model,
+          color: temp.color,
+          ram: temp.ram,
+          storage: temp.storage,
+          imei: imei,
+          buyPrice: temp.buyPrice,
+          sellPrice: temp.sellPrice,
+          status: status,
+          createdAt: dateStr,
+        };
+
+        this.cache.phones.push(newPhone);
+
+        if (isSold) {
+          const saleId = `s_seeded_${month}_${i}`;
+          const newSale: Sale = {
+            id: saleId,
+            phoneId: phoneId,
+            customerName: customerNames[custIdx],
+            sellingPrice: temp.sellPrice,
+            profit: temp.sellPrice - temp.buyPrice,
+            saleDate: dateStr,
+          };
+          this.cache.sales.push(newSale);
+        }
+      }
+    });
+
+    this.saveToDisk();
+    console.log("Successfully seeded Burmese market phone database for April, May, June, July 2026!");
   }
 
   private saveToDisk() {
@@ -267,7 +371,16 @@ class DatabaseManager {
     return [...this.cache.sales];
   }
 
-  public sellPhone(phoneId: string, payload: { customerName?: string; sellingPrice: number; saleDate?: string }): { sale: Sale; phone: Phone } {
+  public sellPhone(phoneId: string, payload: { 
+    customerName?: string; 
+    customerPhone?: string;
+    customerAddress?: string;
+    hasCover?: boolean;
+    hasScreenProtector?: boolean;
+    hasCharger?: boolean;
+    sellingPrice: number; 
+    saleDate?: string; 
+  }): { sale: Sale; phone: Phone } {
     const phoneIndex = this.cache.phones.findIndex((p) => p.id === phoneId);
     if (phoneIndex === -1) {
       throw new Error("Phone not found");
@@ -291,6 +404,11 @@ class DatabaseManager {
       id: this.generateId("sale"),
       phoneId,
       customerName: payload.customerName || undefined,
+      customerPhone: payload.customerPhone || undefined,
+      customerAddress: payload.customerAddress || undefined,
+      hasCover: !!payload.hasCover,
+      hasScreenProtector: !!payload.hasScreenProtector,
+      hasCharger: !!payload.hasCharger,
       sellingPrice: payload.sellingPrice,
       profit,
       saleDate,
@@ -334,6 +452,10 @@ class DatabaseManager {
     const availablePhones = this.cache.phones.filter((p) => p.status === PhoneStatus.Available).length;
     const soldPhones = this.cache.phones.filter((p) => p.status === PhoneStatus.Sold).length;
 
+    const currentStockValue = this.cache.phones
+      .filter((p) => p.status === PhoneStatus.Available)
+      .reduce((sum, p) => sum + p.buyPrice, 0);
+
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
     const thisMonth = now.getMonth(); // 0-11
@@ -366,6 +488,7 @@ class DatabaseManager {
       todaySales,
       thisMonthSales,
       thisMonthProfit,
+      currentStockValue,
     };
   }
 
