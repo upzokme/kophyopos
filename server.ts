@@ -10,7 +10,7 @@ import { db } from "./server/db.js";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Standard middleware
   app.use(express.json());
@@ -23,9 +23,9 @@ async function startServer() {
   });
 
   // 1. GET all phones
-  app.get("/api/phones", (req, res) => {
+  app.get("/api/phones", async (req, res) => {
     try {
-      const phones = db.getPhones();
+      const phones = await db.getPhones();
       res.json(phones);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch phones" });
@@ -33,9 +33,9 @@ async function startServer() {
   });
 
   // 2. GET brand/model/color options for filters
-  app.get("/api/phones/options", (req, res) => {
+  app.get("/api/phones/options", async (req, res) => {
     try {
-      const phones = db.getPhones();
+      const phones = await db.getPhones();
       const brands = Array.from(new Set(phones.map((p) => p.brand))).filter(Boolean).sort();
       const models = Array.from(new Set(phones.map((p) => p.model))).filter(Boolean).sort();
       const colors = Array.from(new Set(phones.map((p) => p.color))).filter(Boolean).sort();
@@ -46,13 +46,13 @@ async function startServer() {
   });
 
   // 3. POST add a phone
-  app.post("/api/phones", (req, res) => {
+  app.post("/api/phones", async (req, res) => {
     try {
       const { brand, model, color, ram, storage, imei, buyPrice, sellPrice, createdAt } = req.body;
       const parsedBuyPrice = parseFloat(buyPrice);
       const parsedSellPrice = parseFloat(sellPrice);
 
-      const newPhone = db.addPhone({
+      const newPhone = await db.addPhone({
         brand: brand?.trim() || "",
         model: model?.trim() || "",
         color: color?.trim() || "",
@@ -71,14 +71,14 @@ async function startServer() {
   });
 
   // 4. PUT update a phone
-  app.put("/api/phones/:id", (req, res) => {
+  app.put("/api/phones/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const { brand, model, color, ram, storage, imei, buyPrice, sellPrice, createdAt } = req.body;
       const parsedBuyPrice = buyPrice !== undefined ? parseFloat(buyPrice) : undefined;
       const parsedSellPrice = sellPrice !== undefined ? parseFloat(sellPrice) : undefined;
 
-      const updatedPhone = db.updatePhone(id, {
+      const updatedPhone = await db.updatePhone(id, {
         brand: brand !== undefined ? brand.trim() : undefined,
         model: model !== undefined ? model.trim() : undefined,
         color: color !== undefined ? color.trim() : undefined,
@@ -97,10 +97,10 @@ async function startServer() {
   });
 
   // 5. DELETE a phone
-  app.delete("/api/phones/:id", (req, res) => {
+  app.delete("/api/phones/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      db.deletePhone(id);
+      await db.deletePhone(id);
       res.json({ success: true, message: "Phone deleted successfully" });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to delete phone" });
@@ -108,10 +108,10 @@ async function startServer() {
   });
 
   // 6. GET all sales (with joined phone details)
-  app.get("/api/sales", (req, res) => {
+  app.get("/api/sales", async (req, res) => {
     try {
-      const sales = db.getSales();
-      const phones = db.getPhones();
+      const sales = await db.getSales();
+      const phones = await db.getPhones();
       const phoneMap = new Map(phones.map((p) => [p.id, p]));
 
       const salesWithPhones = sales.map((sale) => {
@@ -133,7 +133,7 @@ async function startServer() {
   });
 
   // 7. POST create a sale (sell a phone)
-  app.post("/api/sales", (req, res) => {
+  app.post("/api/sales", async (req, res) => {
     try {
       const { phoneId, customerName, customerPhone, customerAddress, hasCover, hasScreenProtector, hasCharger, sellingPrice, saleDate } = req.body;
       const parsedSellingPrice = parseFloat(sellingPrice);
@@ -142,7 +142,7 @@ async function startServer() {
         return res.status(400).json({ error: "Selling price must be a valid number" });
       }
 
-      const result = db.sellPhone(phoneId, {
+      const result = await db.sellPhone(phoneId, {
         customerName: customerName?.trim() || undefined,
         customerPhone: customerPhone?.trim() || undefined,
         customerAddress: customerAddress?.trim() || undefined,
@@ -160,10 +160,10 @@ async function startServer() {
   });
 
   // DELETE a sale (reverts phone to available stock)
-  app.delete("/api/sales/:id", (req, res) => {
+  app.delete("/api/sales/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      db.deleteSale(id);
+      await db.deleteSale(id);
       res.json({ success: true, message: "Sale deleted and phone returned to stock successfully" });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to cancel sale transaction" });
@@ -171,9 +171,9 @@ async function startServer() {
   });
 
   // 8. GET dashboard statistics
-  app.get("/api/dashboard", (req, res) => {
+  app.get("/api/dashboard", async (req, res) => {
     try {
-      const stats = db.getDashboardStats();
+      const stats = await db.getDashboardStats();
       res.json(stats);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch dashboard stats" });
@@ -181,7 +181,7 @@ async function startServer() {
   });
 
   // 9. GET monthly report
-  app.get("/api/reports", (req, res) => {
+  app.get("/api/reports", async (req, res) => {
     try {
       const now = new Date();
       const month = req.query.month ? parseInt(req.query.month as string, 10) : now.getMonth() + 1;
@@ -194,7 +194,7 @@ async function startServer() {
         return res.status(400).json({ error: "Year must be a valid 4-digit number" });
       }
 
-      const report = db.getMonthlyReport(month, year);
+      const report = await db.getMonthlyReport(month, year);
       res.json(report);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch report" });
@@ -202,9 +202,9 @@ async function startServer() {
   });
 
   // 10. POST clear all database data (reset)
-  app.post("/api/reset", (req, res) => {
+  app.post("/api/reset", async (req, res) => {
     try {
-      db.clearAllData();
+      await db.clearAllData();
       res.json({ success: true, message: "Database wiped and reset successfully" });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to reset database" });

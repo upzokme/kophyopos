@@ -5,9 +5,11 @@
 
 import fs from "fs";
 import path from "path";
+import { initializeApp } from "firebase/app";
+import { initializeFirestore, collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { Phone, Sale, PhoneStatus, DashboardStats, MonthlyReport } from "../src/types.js";
 
-// Database file path
+// Database file path for local fallback backup
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "database.json");
 
@@ -16,152 +18,201 @@ interface DatabaseSchema {
   sales: Sale[];
 }
 
-// Initial seed data if DB is empty
-const SEED_PHONES: Phone[] = [
-  {
-    id: "p1",
-    brand: "Apple",
-    model: "iPhone 15 Pro",
-    color: "Titanium Gray",
-    ram: "8GB",
-    storage: "256GB",
-    imei: "358912345678901",
-    buyPrice: 850,
-    sellPrice: 1099,
-    status: PhoneStatus.Available,
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(), // 15 days ago
-  },
-  {
-    id: "p2",
-    brand: "Apple",
-    model: "iPhone 14",
-    color: "Midnight Blue",
-    ram: "6GB",
-    storage: "128GB",
-    imei: "358912345678902",
-    buyPrice: 600,
-    sellPrice: 799,
-    status: PhoneStatus.Sold,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days ago
-  },
-  {
-    id: "p3",
-    brand: "Samsung",
-    model: "Galaxy S24 Ultra",
-    color: "Titanium Black",
-    ram: "12GB",
-    storage: "512GB",
-    imei: "358912345678903",
-    buyPrice: 950,
-    sellPrice: 1299,
-    status: PhoneStatus.Available,
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-  },
-  {
-    id: "p4",
-    brand: "Samsung",
-    model: "Galaxy A54",
-    color: "Awesome Violet",
-    ram: "8GB",
-    storage: "128GB",
-    imei: "358912345678904",
-    buyPrice: 250,
-    sellPrice: 399,
-    status: PhoneStatus.Sold,
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
-  },
-  {
-    id: "p5",
-    brand: "Google",
-    model: "Pixel 8 Pro",
-    color: "Bay Blue",
-    ram: "12GB",
-    storage: "128GB",
-    imei: "358912345678905",
-    buyPrice: 700,
-    sellPrice: 999,
-    status: PhoneStatus.Available,
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
-  },
-  {
-    id: "p6",
-    brand: "Xiaomi",
-    model: "Redmi Note 13 Pro",
-    color: "Ocean Teal",
-    ram: "8GB",
-    storage: "256GB",
-    imei: "358912345678906",
-    buyPrice: 180,
-    sellPrice: 299,
-    status: PhoneStatus.Available,
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-  },
-];
+// Read Firebase Config from firebase-applet-config.json with environment variable fallbacks
+const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+let config: any = {};
 
-const SEED_SALES: Sale[] = [
-  {
-    id: "s1",
-    phoneId: "p2",
-    customerName: "Alice Smith",
-    sellingPrice: 780,
-    profit: 180, // 780 - 600
-    saleDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(), // 12 days ago
-  },
-  {
-    id: "s2",
-    phoneId: "p4",
-    customerName: "Bob Jones",
-    sellingPrice: 380,
-    profit: 130, // 380 - 250
-    saleDate: new Date().toISOString(), // Today
-  },
-];
+if (fs.existsSync(configPath)) {
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } catch (e) {
+    console.warn("Failed to parse firebase-applet-config.json, using environment fallback if available:", e);
+  }
+}
+
+const firebaseConfig = {
+  apiKey: config.apiKey || process.env.FIREBASE_API_KEY,
+  authDomain: config.authDomain || process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: config.projectId || process.env.FIREBASE_PROJECT_ID,
+  storageBucket: config.storageBucket || process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: config.messagingSenderId || process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: config.appId || process.env.FIREBASE_APP_ID
+};
+
+const dbId = config.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID;
+
+// Initialize Firebase App and Firestore database
+const firebaseApp = initializeApp(firebaseConfig);
+const firestoreDb = initializeFirestore(firebaseApp, {}, dbId);
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 class DatabaseManager {
   private cache: DatabaseSchema = { phones: [], sales: [] };
+  private initializedPromise: Promise<void>;
 
   constructor() {
-    this.init();
+    this.initializedPromise = this.init();
   }
 
-  private init() {
+  private async init() {
     try {
+      // 1. Ensure the local data directory exists for backup
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
 
-      if (!fs.existsSync(DB_FILE)) {
-        this.cache = {
-          phones: [],
-          sales: [],
-        };
-        this.saveToDisk();
-      } else {
-        const raw = fs.readFileSync(DB_FILE, "utf-8");
-        this.cache = JSON.parse(raw);
-        // Ensure structure is correct
-        if (!this.cache.phones) this.cache.phones = [];
-        if (!this.cache.sales) this.cache.sales = [];
+      // 2. Load local cache as backup first so we can serve immediately
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const raw = fs.readFileSync(DB_FILE, "utf-8");
+          this.cache = JSON.parse(raw);
+        } catch (e) {
+          console.error("Failed to parse local backup file:", e);
+        }
       }
 
-      // Automatically seed April, May, June, July data if empty
-      this.seedBurmeseMarketData();
+      if (!this.cache.phones) this.cache.phones = [];
+      if (!this.cache.sales) this.cache.sales = [];
+
+      // 3. Connect and retrieve latest cloud data from Firestore to sync
+      console.log("Connecting to Firestore and fetching data...");
+      
+      let phonesSnapshot;
+      try {
+        phonesSnapshot = await getDocs(collection(firestoreDb, "phones"));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, "phones");
+        return;
+      }
+
+      let salesSnapshot;
+      try {
+        salesSnapshot = await getDocs(collection(firestoreDb, "sales"));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, "sales");
+        return;
+      }
+
+      const firestorePhones: Phone[] = [];
+      phonesSnapshot.forEach((d) => {
+        firestorePhones.push(d.data() as Phone);
+      });
+
+      const firestoreSales: Sale[] = [];
+      salesSnapshot.forEach((d) => {
+        firestoreSales.push(d.data() as Sale);
+      });
+
+      if (firestorePhones.length > 0 || firestoreSales.length > 0) {
+        console.log("Loaded data successfully from Cloud Firestore!");
+        // Sync cache with Cloud database content
+        this.cache.phones = firestorePhones.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        this.cache.sales = firestoreSales.sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
+        this.saveToDisk(); // Update local backup file
+      } else {
+        // Firestore is empty! Seed with initial database templates and sync to Cloud
+        console.log("Cloud Firestore is empty! Seeding and migrating data to Cloud Firestore...");
+        this.seedBurmeseMarketData();
+
+        const batch = writeBatch(firestoreDb);
+        this.cache.phones.forEach((phone) => {
+          const phoneRef = doc(firestoreDb, "phones", phone.id);
+          batch.set(phoneRef, phone);
+        });
+
+        this.cache.sales.forEach((sale) => {
+          const saleRef = doc(firestoreDb, "sales", sale.id);
+          batch.set(saleRef, sale);
+        });
+
+        try {
+          await batch.commit();
+          console.log("Seed data successfully uploaded to Cloud Firestore!");
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, "batch_migration");
+        }
+      }
     } catch (err) {
-      console.error("Failed to initialize database:", err);
-      this.cache = { phones: [], sales: [] };
+      console.error("Failed to sync with Firestore, running on local database fallback:", err);
     }
   }
 
-  public clearAllData(): void {
+  public async clearAllData(): Promise<void> {
+    await this.initializedPromise;
     this.cache = {
       phones: [],
       sales: [],
     };
     this.saveToDisk();
+
+    // Delete all documents in Firestore
+    try {
+      const batch = writeBatch(firestoreDb);
+      
+      let phonesSnapshot = await getDocs(collection(firestoreDb, "phones"));
+      let salesSnapshot = await getDocs(collection(firestoreDb, "sales"));
+
+      phonesSnapshot.forEach((d) => {
+        const phoneRef = doc(firestoreDb, "phones", d.id);
+        batch.delete(phoneRef);
+      });
+
+      salesSnapshot.forEach((d) => {
+        const saleRef = doc(firestoreDb, "sales", d.id);
+        batch.delete(saleRef);
+      });
+
+      await batch.commit();
+      console.log("Successfully wiped Firestore cloud data");
+    } catch (err) {
+      console.error("Failed to wipe Firestore:", err);
+    }
   }
 
   private seedBurmeseMarketData() {
-    // If we already have phones, don't auto-seed on start so we don't duplicate or overwrite
     if (this.cache.phones.length > 0) {
       return;
     }
@@ -189,10 +240,6 @@ class DatabaseManager {
 
     const targetYear = 2026;
 
-    // April (3): 10 phones, 5 sold, 5 available
-    // May (4): 10 phones, 5 sold, 5 available
-    // June (5): 10 phones, 5 sold, 5 available
-    // July (6): 5 phones, 3 sold, 2 available
     const config = [
       { month: 3, totalPhones: 10, soldPhones: 5, days: 30 },
       { month: 4, totalPhones: 10, soldPhones: 5, days: 31 },
@@ -210,7 +257,6 @@ class DatabaseManager {
         const isSold = i <= soldPhones;
         const status = isSold ? PhoneStatus.Sold : PhoneStatus.Available;
 
-        // Distribute dates across the month
         const day = Math.floor(((i - 1) * days) / totalPhones) + 1;
         const hour = 10 + (i % 8);
         const minute = (i * 13) % 60;
@@ -250,34 +296,35 @@ class DatabaseManager {
     });
 
     this.saveToDisk();
-    console.log("Successfully seeded Burmese market phone database for April, May, June, July 2026!");
   }
 
   private saveToDisk() {
     try {
       fs.writeFileSync(DB_FILE, JSON.stringify(this.cache, null, 2), "utf-8");
     } catch (err) {
-      console.error("Failed to save database to disk:", err);
+      console.error("Failed to save database backup to disk:", err);
     }
   }
 
-  // Generate unique ID
   private generateId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   // --- PHONES ---
 
-  public getPhones(): Phone[] {
+  public async getPhones(): Promise<Phone[]> {
+    await this.initializedPromise;
     return [...this.cache.phones];
   }
 
-  public getPhone(id: string): Phone | undefined {
+  public async getPhone(id: string): Promise<Phone | undefined> {
+    await this.initializedPromise;
     return this.cache.phones.find((p) => p.id === id);
   }
 
-  public addPhone(phone: Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }): Phone {
-    // Validations
+  public async addPhone(phone: Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }): Promise<Phone> {
+    await this.initializedPromise;
+
     if (!phone.brand || !phone.model || !phone.imei) {
       throw new Error("Brand, Model, and IMEI are required");
     }
@@ -290,7 +337,6 @@ class DatabaseManager {
       throw new Error("Sell price cannot be negative");
     }
 
-    // Uniqueness check for IMEI
     const imeiExists = this.cache.phones.some((p) => p.imei === phone.imei);
     if (imeiExists) {
       throw new Error(`IMEI ${phone.imei} is already registered to another phone.`);
@@ -310,12 +356,24 @@ class DatabaseManager {
       createdAt: phone.createdAt ? new Date(phone.createdAt).toISOString() : new Date().toISOString(),
     };
 
-    this.cache.phones.unshift(newPhone); // Newest first
+    this.cache.phones.unshift(newPhone);
     this.saveToDisk();
+
+    // Sync to Cloud Firestore
+    try {
+      const phoneRef = doc(firestoreDb, "phones", newPhone.id);
+      await setDoc(phoneRef, newPhone);
+    } catch (err) {
+      console.error("Failed to save new phone to Firestore:", err);
+      // We still return newPhone because it's saved locally
+    }
+
     return newPhone;
   }
 
-  public updatePhone(id: string, updatedFields: Partial<Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }>): Phone {
+  public async updatePhone(id: string, updatedFields: Partial<Omit<Phone, "id" | "status" | "createdAt"> & { createdAt?: string }>): Promise<Phone> {
+    await this.initializedPromise;
+
     const index = this.cache.phones.findIndex((p) => p.id === id);
     if (index === -1) {
       throw new Error("Phone not found");
@@ -323,7 +381,6 @@ class DatabaseManager {
 
     const existing = this.cache.phones[index];
 
-    // Check unique IMEI if changed
     if (updatedFields.imei && updatedFields.imei !== existing.imei) {
       const imeiExists = this.cache.phones.some((p) => p.imei === updatedFields.imei && p.id !== id);
       if (imeiExists) {
@@ -347,10 +404,21 @@ class DatabaseManager {
 
     this.cache.phones[index] = updatedPhone;
     this.saveToDisk();
+
+    // Sync to Cloud Firestore
+    try {
+      const phoneRef = doc(firestoreDb, "phones", id);
+      await setDoc(phoneRef, updatedPhone);
+    } catch (err) {
+      console.error("Failed to update phone in Firestore:", err);
+    }
+
     return updatedPhone;
   }
 
-  public deletePhone(id: string): void {
+  public async deletePhone(id: string): Promise<void> {
+    await this.initializedPromise;
+
     const index = this.cache.phones.findIndex((p) => p.id === id);
     if (index === -1) {
       throw new Error("Phone not found");
@@ -363,15 +431,24 @@ class DatabaseManager {
 
     this.cache.phones.splice(index, 1);
     this.saveToDisk();
+
+    // Sync to Cloud Firestore
+    try {
+      const phoneRef = doc(firestoreDb, "phones", id);
+      await deleteDoc(phoneRef);
+    } catch (err) {
+      console.error("Failed to delete phone from Firestore:", err);
+    }
   }
 
   // --- SALES ---
 
-  public getSales(): Sale[] {
+  public async getSales(): Promise<Sale[]> {
+    await this.initializedPromise;
     return [...this.cache.sales];
   }
 
-  public sellPhone(phoneId: string, payload: { 
+  public async sellPhone(phoneId: string, payload: { 
     customerName?: string; 
     customerPhone?: string;
     customerAddress?: string;
@@ -380,7 +457,9 @@ class DatabaseManager {
     hasCharger?: boolean;
     sellingPrice: number; 
     saleDate?: string; 
-  }): { sale: Sale; phone: Phone } {
+  }): Promise<{ sale: Sale; phone: Phone }> {
+    await this.initializedPromise;
+
     const phoneIndex = this.cache.phones.findIndex((p) => p.id === phoneId);
     if (phoneIndex === -1) {
       throw new Error("Phone not found");
@@ -395,11 +474,9 @@ class DatabaseManager {
       throw new Error("Selling price cannot be negative");
     }
 
-    // Calculate profit
     const profit = payload.sellingPrice - phone.buyPrice;
-
-    // Create Sale record
     const saleDate = payload.saleDate ? new Date(payload.saleDate).toISOString() : new Date().toISOString();
+
     const newSale: Sale = {
       id: this.generateId("sale"),
       phoneId,
@@ -414,18 +491,30 @@ class DatabaseManager {
       saleDate,
     };
 
-    // Update phone status
     phone.status = PhoneStatus.Sold;
     this.cache.phones[phoneIndex] = phone;
 
-    // Save sale
     this.cache.sales.unshift(newSale);
     this.saveToDisk();
+
+    // Sync to Cloud Firestore (Atomic Batch)
+    try {
+      const batch = writeBatch(firestoreDb);
+      const saleRef = doc(firestoreDb, "sales", newSale.id);
+      const phoneRef = doc(firestoreDb, "phones", phoneId);
+      batch.set(saleRef, newSale);
+      batch.set(phoneRef, phone);
+      await batch.commit();
+    } catch (err) {
+      console.error("Failed to record sale in Firestore:", err);
+    }
 
     return { sale: newSale, phone };
   }
 
-  public deleteSale(saleId: string): void {
+  public async deleteSale(saleId: string): Promise<void> {
+    await this.initializedPromise;
+
     const saleIndex = this.cache.sales.findIndex((s) => s.id === saleId);
     if (saleIndex === -1) {
       throw new Error("Sale record not found");
@@ -434,20 +523,34 @@ class DatabaseManager {
     const sale = this.cache.sales[saleIndex];
     const phoneId = sale.phoneId;
 
-    // Find the phone and revert its status to Available
     const phoneIndex = this.cache.phones.findIndex((p) => p.id === phoneId);
     if (phoneIndex !== -1) {
       this.cache.phones[phoneIndex].status = PhoneStatus.Available;
     }
 
-    // Delete the sale record
     this.cache.sales.splice(saleIndex, 1);
     this.saveToDisk();
+
+    // Sync to Cloud Firestore (Atomic Batch)
+    try {
+      const batch = writeBatch(firestoreDb);
+      const saleRef = doc(firestoreDb, "sales", saleId);
+      batch.delete(saleRef);
+      if (phoneIndex !== -1) {
+        const phoneRef = doc(firestoreDb, "phones", phoneId);
+        batch.set(phoneRef, this.cache.phones[phoneIndex]);
+      }
+      await batch.commit();
+    } catch (err) {
+      console.error("Failed to cancel sale in Firestore:", err);
+    }
   }
 
   // --- DASHBOARD ---
 
-  public getDashboardStats(): DashboardStats {
+  public async getDashboardStats(): Promise<DashboardStats> {
+    await this.initializedPromise;
+
     const totalPhones = this.cache.phones.length;
     const availablePhones = this.cache.phones.filter((p) => p.status === PhoneStatus.Available).length;
     const soldPhones = this.cache.phones.filter((p) => p.status === PhoneStatus.Sold).length;
@@ -457,8 +560,8 @@ class DatabaseManager {
       .reduce((sum, p) => sum + p.buyPrice, 0);
 
     const now = new Date();
-    const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
-    const thisMonth = now.getMonth(); // 0-11
+    const todayStr = now.toISOString().split("T")[0];
+    const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
 
     let todaySales = 0;
@@ -469,12 +572,10 @@ class DatabaseManager {
       const saleDate = new Date(s.saleDate);
       const saleDateStr = s.saleDate.split("T")[0];
 
-      // Today's Sales
       if (saleDateStr === todayStr) {
         todaySales += s.sellingPrice;
       }
 
-      // This Month's Sales & Profit
       if (saleDate.getMonth() === thisMonth && saleDate.getFullYear() === thisYear) {
         thisMonthSales += s.sellingPrice;
         thisMonthProfit += s.profit;
@@ -494,14 +595,14 @@ class DatabaseManager {
 
   // --- REPORTS ---
 
-  public getMonthlyReport(month: number, year: number): MonthlyReport {
+  public async getMonthlyReport(month: number, year: number): Promise<MonthlyReport> {
+    await this.initializedPromise;
+
     let phonesSold = 0;
     let totalRevenue = 0;
     let totalCost = 0;
     let totalProfit = 0;
 
-    // We need to calculate total Cost (sum of buyPrice of sold phones in that month)
-    // Map phone IDs to easily look up their buyPrice
     const phoneMap = new Map<string, Phone>();
     this.cache.phones.forEach((p) => phoneMap.set(p.id, p));
 
@@ -519,8 +620,6 @@ class DatabaseManager {
       }
     });
 
-    // Current Stock Value is the sum of buyPrice of ALL currently Available phones
-    // (regardless of when they were added)
     const currentStockValue = this.cache.phones
       .filter((p) => p.status === PhoneStatus.Available)
       .reduce((sum, p) => sum + p.buyPrice, 0);

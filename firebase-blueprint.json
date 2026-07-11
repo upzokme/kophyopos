@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "Phone": {
+      "title": "Phone",
+      "description": "Represents an inventory item for a mobile phone.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "color": { "type": "string" },
+        "ram": { "type": "string" },
+        "storage": { "type": "string" },
+        "imei": { "type": "string" },
+        "buyPrice": { "type": "number" },
+        "sellPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["Available", "Sold"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "brand", "model", "imei", "buyPrice", "sellPrice", "status", "createdAt"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Represents a transaction of a phone sale.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "phoneId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "hasCover": { "type": "boolean" },
+        "hasScreenProtector": { "type": "boolean" },
+        "hasCharger": { "type": "boolean" },
+        "sellingPrice": { "type": "number" },
+        "profit": { "type": "number" },
+        "saleDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "phoneId", "sellingPrice", "profit", "saleDate"]
+    }
+  },
+  "firestore": {
+    "/phones/{phoneId}": {
+      "schema": "Phone",
+      "description": "Collection of stock phones."
+    },
+    "/sales/{saleId}": {
+      "schema": "Sale",
+      "description": "Collection of recorded phone sales."
+    }
+  }
+}
