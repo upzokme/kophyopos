@@ -89,6 +89,20 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+function cleanForFirestore<T extends object>(obj: T): any {
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = cleanForFirestore(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+}
+
 class DatabaseManager {
   private cache: DatabaseSchema = { phones: [], sales: [] };
   private initializedPromise: Promise<void>;
@@ -160,12 +174,12 @@ class DatabaseManager {
         const batch = writeBatch(firestoreDb);
         this.cache.phones.forEach((phone) => {
           const phoneRef = doc(firestoreDb, "phones", phone.id);
-          batch.set(phoneRef, phone);
+          batch.set(phoneRef, cleanForFirestore(phone));
         });
 
         this.cache.sales.forEach((sale) => {
           const saleRef = doc(firestoreDb, "sales", sale.id);
-          batch.set(saleRef, sale);
+          batch.set(saleRef, cleanForFirestore(sale));
         });
 
         try {
@@ -362,7 +376,7 @@ class DatabaseManager {
     // Sync to Cloud Firestore
     try {
       const phoneRef = doc(firestoreDb, "phones", newPhone.id);
-      await setDoc(phoneRef, newPhone);
+      await setDoc(phoneRef, cleanForFirestore(newPhone));
     } catch (err) {
       console.error("Failed to save new phone to Firestore:", err);
       // We still return newPhone because it's saved locally
@@ -396,9 +410,14 @@ class DatabaseManager {
       throw new Error("Sell price cannot be negative");
     }
 
+    // Clean updatedFields by removing undefined values to prevent overwriting existing properties
+    const cleanFields = Object.fromEntries(
+      Object.entries(updatedFields).filter(([_, v]) => v !== undefined)
+    );
+
     const updatedPhone: Phone = {
       ...existing,
-      ...updatedFields,
+      ...cleanFields,
       createdAt: updatedFields.createdAt ? new Date(updatedFields.createdAt).toISOString() : existing.createdAt,
     };
 
@@ -408,7 +427,7 @@ class DatabaseManager {
     // Sync to Cloud Firestore
     try {
       const phoneRef = doc(firestoreDb, "phones", id);
-      await setDoc(phoneRef, updatedPhone);
+      await setDoc(phoneRef, cleanForFirestore(updatedPhone));
     } catch (err) {
       console.error("Failed to update phone in Firestore:", err);
     }
@@ -502,11 +521,11 @@ class DatabaseManager {
       const batch = writeBatch(firestoreDb);
       const saleRef = doc(firestoreDb, "sales", newSale.id);
       const phoneRef = doc(firestoreDb, "phones", phoneId);
-      batch.set(saleRef, newSale);
-      batch.set(phoneRef, phone);
+      batch.set(saleRef, cleanForFirestore(newSale));
+      batch.set(phoneRef, cleanForFirestore(phone));
       await batch.commit();
     } catch (err) {
-      console.error("Failed to record sale in Firestore:", err);
+      handleFirestoreError(err, OperationType.WRITE, "sales/" + newSale.id);
     }
 
     return { sale: newSale, phone };
@@ -538,11 +557,11 @@ class DatabaseManager {
       batch.delete(saleRef);
       if (phoneIndex !== -1) {
         const phoneRef = doc(firestoreDb, "phones", phoneId);
-        batch.set(phoneRef, this.cache.phones[phoneIndex]);
+        batch.set(phoneRef, cleanForFirestore(this.cache.phones[phoneIndex]));
       }
       await batch.commit();
     } catch (err) {
-      console.error("Failed to cancel sale in Firestore:", err);
+      handleFirestoreError(err, OperationType.DELETE, "sales/" + saleId);
     }
   }
 

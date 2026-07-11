@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Smartphone,
   CheckCircle,
@@ -20,6 +20,7 @@ import {
   PackageCheck,
   Plus,
   BarChart3,
+  Award,
 } from "lucide-react";
 import { DashboardStats, Sale } from "../types.js";
 import { formatKyat, formatBurmeseDate, toMyanmarDigits } from "../utils.js";
@@ -32,6 +33,8 @@ interface DashboardViewProps {
 }
 
 export default function DashboardView({ stats, recentSales, setActiveTab, onAddPhoneClick }: DashboardViewProps) {
+  const [hoveredBrandIndex, setHoveredBrandIndex] = useState<number | null>(null);
+
   // Group sales chronologically by month
   const monthlyData = useMemo(() => {
     if (!recentSales || recentSales.length === 0) {
@@ -117,6 +120,134 @@ export default function DashboardView({ stats, recentSales, setActiveTab, onAddP
     return `${toMyanmarDigits(val.toLocaleString())} ကျပ်`;
   };
 
+  // Group sales by Brand
+  const brandSalesData = useMemo(() => {
+    if (!recentSales || recentSales.length === 0) {
+      return [];
+    }
+
+    const brandMap: Record<string, { brand: string; unitsSold: number; totalRevenue: number; totalProfit: number }> = {};
+
+    recentSales.forEach((sale) => {
+      const brand = sale.brand || "အခြား";
+      if (!brandMap[brand]) {
+        brandMap[brand] = {
+          brand,
+          unitsSold: 0,
+          totalRevenue: 0,
+          totalProfit: 0,
+        };
+      }
+      brandMap[brand].unitsSold += 1;
+      brandMap[brand].totalRevenue += sale.sellingPrice || 0;
+      brandMap[brand].totalProfit += sale.profit || 0;
+    });
+
+    return Object.values(brandMap).sort((a, b) => b.unitsSold - a.unitsSold);
+  }, [recentSales]);
+
+  const totalBrandUnits = useMemo(() => {
+    return brandSalesData.reduce((sum, item) => sum + item.unitsSold, 0);
+  }, [brandSalesData]);
+
+  const pieSlices = useMemo(() => {
+    if (brandSalesData.length === 0) return [];
+    let accumulatedAngle = -90; // Start at 12 o'clock
+
+    return brandSalesData.map((data, index) => {
+      const percentage = totalBrandUnits > 0 ? (data.unitsSold / totalBrandUnits) * 100 : 0;
+      const angle = (percentage / 100) * 360;
+
+      // Start angle & end angle in radians
+      const startAngleRad = (accumulatedAngle * Math.PI) / 180;
+      const endAngleRad = ((accumulatedAngle + angle) * Math.PI) / 180;
+
+      // Outer radius
+      const r = 50;
+      const cx = 60;
+      const cy = 60;
+
+      // Coordinates for arc
+      const x1 = cx + r * Math.cos(startAngleRad);
+      const y1 = cy + r * Math.sin(startAngleRad);
+      const x2 = cx + r * Math.cos(endAngleRad);
+      const y2 = cy + r * Math.sin(endAngleRad);
+
+      const largeArcFlag = angle > 180 ? 1 : 0;
+
+      // Path data
+      let pathData = "";
+      if (percentage >= 99.9) {
+        pathData = `
+          M ${cx} ${cy - r}
+          A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r}
+          Z
+        `;
+      } else {
+        pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+      }
+
+      const middleAngle = accumulatedAngle + angle / 2;
+      accumulatedAngle += angle;
+
+      return {
+        ...data,
+        percentage,
+        pathData,
+        middleAngle,
+      };
+    });
+  }, [brandSalesData, totalBrandUnits]);
+
+  const getSliceTransform = (middleAngle: number, isHovered: boolean) => {
+    if (!isHovered) return "translate(0, 0)";
+    const shiftRadius = 3.5; // Shift outward
+    const angleRad = (middleAngle * Math.PI) / 180;
+    const dx = shiftRadius * Math.cos(angleRad);
+    const dy = shiftRadius * Math.sin(angleRad);
+    return `translate(${dx}px, ${dy}px) scale(1.04)`;
+  };
+
+  const getBrandColor = (brand: string, index: number) => {
+    const colors = [
+      "#6366f1", // Indigo
+      "#06b6d4", // Cyan
+      "#10b981", // Emerald
+      "#f59e0b", // Amber
+      "#ec4899", // Pink
+      "#3b82f6", // Blue
+      "#8b5cf6", // Violet
+      "#14b8a6", // Teal
+    ];
+    const b = brand.toLowerCase();
+    if (b.includes("apple") || b.includes("iphone")) return "#475569"; // Slate 600
+    if (b.includes("samsung")) return "#2563eb"; // Blue 600
+    if (b.includes("xiaomi") || b.includes("redmi")) return "#ea580c"; // Orange 600
+    if (b.includes("oppo")) return "#16a34a"; // Green 600
+    if (b.includes("vivo")) return "#0ea5e9"; // Sky 500
+    return colors[index % colors.length];
+  };
+
+  const getBrandBgColor = (brand: string) => {
+    const b = brand.toLowerCase();
+    if (b.includes("apple") || b.includes("iphone")) return "bg-slate-700 dark:bg-slate-400";
+    if (b.includes("samsung")) return "bg-blue-600 dark:bg-blue-500";
+    if (b.includes("xiaomi") || b.includes("redmi")) return "bg-orange-500 dark:bg-orange-600";
+    if (b.includes("oppo")) return "bg-emerald-600 dark:bg-emerald-500";
+    if (b.includes("vivo")) return "bg-sky-500 dark:bg-sky-400";
+    return "bg-indigo-600 dark:bg-indigo-500";
+  };
+
+  const getBrandTextColor = (brand: string) => {
+    const b = brand.toLowerCase();
+    if (b.includes("apple") || b.includes("iphone")) return "text-slate-700 dark:text-slate-300";
+    if (b.includes("samsung")) return "text-blue-600 dark:text-blue-400";
+    if (b.includes("xiaomi") || b.includes("redmi")) return "text-orange-600 dark:text-orange-400";
+    if (b.includes("oppo")) return "text-emerald-600 dark:text-emerald-400";
+    if (b.includes("vivo")) return "text-sky-600 dark:text-sky-400";
+    return "text-indigo-600 dark:text-indigo-400";
+  };
+
   const statCards = [
     {
       title: "လက်ကျန်နှင့် ရောင်းပြီး စုစုပေါင်းဖုန်းအရေအတွက်",
@@ -127,20 +258,20 @@ export default function DashboardView({ stats, recentSales, setActiveTab, onAddP
       tab: "stock",
     },
     {
-      title: "ကျန်ရှိသောဖုန်းအရေအတွက်",
-      value: `${toMyanmarDigits(stats.availablePhones)} လုံး`,
-      icon: CheckCircle,
-      color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400",
-      description: "ရောင်းရန်ကျန်ရှိသော ဖုန်းလက်ကျန်",
-      tab: "stock",
-    },
-    {
       title: "ရောင်းပြီးဖုန်းအရေအတွက်",
       value: `${toMyanmarDigits(stats.soldPhones)} လုံး`,
       icon: ShoppingBag,
       color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400",
       description: "အောင်မြင်စွာ ရောင်းချပြီးစီးမှုများ",
       tab: "sold",
+    },
+    {
+      title: "ကျန်ရှိသောဖုန်းအရေအတွက်",
+      value: `${toMyanmarDigits(stats.availablePhones)} လုံး`,
+      icon: CheckCircle,
+      color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400",
+      description: "ရောင်းရန်ကျန်ရှိသော ဖုန်းလက်ကျန်",
+      tab: "stock",
     },
     {
       title: "ကျန်ရှိသောဝယ်ရင်ဈေး စုစုပေါင်းတန်ဖိုး",
@@ -339,6 +470,135 @@ export default function DashboardView({ stats, recentSales, setActiveTab, onAddP
                   })}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Best Selling Brand Chart */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white font-display text-base flex items-center gap-2">
+              <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
+              လစဉ် အရောင်းရဆုံး ဖုန်း Brand ပြဇယား (Pie Chart % ပြ)
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              ဖုန်းတံဆိပ် (Brand) များအလိုက် ရောင်းချရမှု ရာခိုင်နှုန်းနှင့် အရောင်းစွမ်းဆောင်ရည် ခြုံငုံသုံးသပ်ချက်
+            </p>
+          </div>
+        </div>
+
+        {brandSalesData.length === 0 ? (
+          <div className="h-48 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-100 dark:border-slate-800/60 rounded-xl">
+            <Award className="h-10 w-10 text-slate-300 dark:text-slate-700 mb-2 animate-pulse" />
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">အရောင်းရဆုံး Brand မှတ်တမ်းများ မရှိသေးပါ</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              ဖုန်းများကို စတင်ရောင်းချပြီးပါက လူကြိုက်အများဆုံး Brand များကို ဤနေရာတွင် အလိုအလျောက် သရုပ်ဖော်ပြသပေးမည် ဖြစ်ပါသည်။
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center py-2">
+            {/* Left Column: Modern Pie Chart representation */}
+            <div className="md:col-span-5 flex flex-col justify-center items-center gap-4 py-2">
+              <svg viewBox="0 0 120 120" className="w-44 h-44 md:w-52 md:h-52 select-none overflow-visible">
+                {/* Dynamic Brand Pie Slices */}
+                {pieSlices.map((slice, idx) => {
+                  const color = getBrandColor(slice.brand, idx);
+                  const isHovered = hoveredBrandIndex === idx;
+                  const sliceTransform = getSliceTransform(slice.middleAngle, isHovered);
+
+                  return (
+                    <path
+                      key={idx}
+                      d={slice.pathData}
+                      fill={color}
+                      stroke="white"
+                      strokeWidth="1.2"
+                      style={{
+                        transform: sliceTransform,
+                        transformOrigin: "60px 60px",
+                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      }}
+                      className="cursor-pointer hover:brightness-105 dark:stroke-slate-900"
+                      onMouseEnter={() => setHoveredBrandIndex(idx)}
+                      onMouseLeave={() => setHoveredBrandIndex(null)}
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Information Widget positioned below the circle */}
+              <div className="flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-800/40 shadow-sm px-4 py-2 rounded-2xl border border-slate-200/50 dark:border-slate-800/80 min-w-[160px] max-w-[200px] transition-all duration-300">
+                {hoveredBrandIndex !== null ? (
+                  <>
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 truncate max-w-[170px]">
+                      {pieSlices[hoveredBrandIndex].brand}
+                    </span>
+                    <span className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
+                      {toMyanmarDigits(pieSlices[hoveredBrandIndex].percentage.toFixed(1))}%
+                    </span>
+                    <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 mt-0.5">
+                      {toMyanmarDigits(pieSlices[hoveredBrandIndex].unitsSold)} လုံးရောင်းပြီး
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      စုစုပေါင်းရောင်းရ
+                    </span>
+                    <span className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
+                      {toMyanmarDigits(totalBrandUnits)} လုံး
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 mt-0.5">
+                      ၁၀၀% စုစုပေါင်း
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Premium Legend & Metrics List */}
+            <div className="md:col-span-7 space-y-2.5">
+              {pieSlices.map((slice, idx) => {
+                const color = getBrandColor(slice.brand, idx);
+                const isHovered = hoveredBrandIndex === idx;
+                return (
+                  <div
+                    key={idx}
+                    onMouseEnter={() => setHoveredBrandIndex(idx)}
+                    onMouseLeave={() => setHoveredBrandIndex(null)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                      isHovered
+                        ? "bg-slate-50 dark:bg-slate-800/40 border-indigo-500/30 dark:border-indigo-400/30 scale-[1.01]"
+                        : "bg-transparent border-slate-100/60 dark:border-slate-800/40 hover:bg-slate-50/40 dark:hover:bg-slate-800/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Color marker dot */}
+                      <span
+                        className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm transition-all"
+                        style={{ backgroundColor: color, transform: isHovered ? "scale(1.2)" : "scale(1)" }}
+                      />
+                      <span className="font-bold text-sm text-slate-900 dark:text-white">
+                        {slice.brand}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs font-medium">
+                      <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-extrabold px-2 py-0.5 rounded-lg font-mono text-[10px]">
+                        {toMyanmarDigits(slice.percentage.toFixed(1))}%
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 font-bold">
+                        ရောင်းပြီး: <span className="font-extrabold text-sm" style={{ color: color }}>{toMyanmarDigits(slice.unitsSold)}</span> လုံး
+                      </span>
+                      <span className="text-slate-200 dark:text-slate-800 font-light">|</span>
+                      <span className="text-slate-500 dark:text-slate-400">
+                        ရောင်းရငွေ: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatKyat(slice.totalRevenue)}</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

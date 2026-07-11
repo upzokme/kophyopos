@@ -217,9 +217,6 @@ export default function App() {
   };
 
   const handleResetAllData = async () => {
-    if (!window.confirm("သေချာပါသလား? ဖုန်းလက်ကျန်များ၊ အရောင်းမှတ်တမ်းများနှင့် လစဉ်အစီရင်ခံစာများ အားလုံး အပြီးတိုင် ပျက်ပြယ်သွားမည်ဖြစ်ပြီး ပြန်လည်ရယူနိုင်မည်မဟုတ်ပါ။")) {
-      return;
-    }
     try {
       setLoading(true);
       const res = await fetch("/api/reset", { method: "POST" });
@@ -231,6 +228,7 @@ export default function App() {
       await fetchAllData();
     } catch (err: any) {
       addToast(err.message || "အမှားအယွင်း ဖြစ်ပေါ်ခဲ့ပါသည်။", "error");
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -263,6 +261,7 @@ export default function App() {
       theme={theme}
       toggleTheme={toggleTheme}
       onLogout={handleLogout}
+      onResetData={handleResetAllData}
     >
       {loading ? (
         <div className="h-96 flex flex-col items-center justify-center gap-4 text-center">
