@@ -357,6 +357,17 @@ export default function StockView({
     return availablePhones.reduce((sum, p) => sum + p.buyPrice, 0);
   }, [availablePhones]);
 
+  const brandStock = useMemo(() => {
+    const counts: Record<string, number> = {};
+    availablePhones.forEach((p) => {
+      const b = p.brand.trim();
+      counts[b] = (counts[b] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => b.count - a.count || a.brand.localeCompare(b.brand));
+  }, [availablePhones]);
+
   return (
     <div className="space-y-6 font-sans">
       {/* Title block */}
@@ -376,18 +387,38 @@ export default function StockView({
 
       {/* Stock Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-sans">
-              ကျန်ရှိသော ဖုန်းအရေအတွက်
-            </span>
-            <span className="text-2xl font-extrabold text-slate-900 dark:text-white font-mono">
-              {toMyanmarDigits(totalStockCount.toString())} လုံး
-            </span>
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between gap-4">
+          <div className="flex items-center justify-between w-full">
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-sans">
+                ကျန်ရှိသော ဖုန်းအရေအတွက်
+              </span>
+              <span className="text-2xl font-extrabold text-slate-900 dark:text-white font-mono">
+                {toMyanmarDigits(totalStockCount.toString())} လုံး
+              </span>
+            </div>
+            <div className="bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400 p-3 rounded-xl shrink-0">
+              <Smartphone className="h-6 w-6" />
+            </div>
           </div>
-          <div className="bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400 p-3 rounded-xl shrink-0">
-            <Smartphone className="h-6 w-6" />
-          </div>
+
+          {brandStock.length > 0 && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 w-full animate-fade-in">
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">
+                တံဆိပ်အလိုက် လက်ကျန်စာရင်း
+              </span>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                {brandStock.map(({ brand, count }) => (
+                  <div key={brand} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 dark:border-slate-800/40">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium truncate max-w-[120px]">{brand}</span>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">
+                      {toMyanmarDigits(count.toString())} လုံး
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm flex items-center justify-between">
