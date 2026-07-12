@@ -1,6 +1,6 @@
 {
   "name": "Phone Shop Inventory & POS",
   "description": "A clean, modern, and high-performance offline-ready inventory management and point-of-sale system for small phone shops.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -15,10 +15,12 @@ import {
   X,
   AlertTriangle,
   Calendar,
+  Camera,
 } from "lucide-react";
 import { Phone, PhoneStatus, BrandModelColorOptions } from "../types.js";
 import { formatKyat, toMyanmarDigits, formatBurmeseDate } from "../utils.js";
 import SellModal from "./SellModal.js";
+import BarcodeScanner from "./BarcodeScanner.js";
 
 interface StockViewProps {
   phones: Phone[];
@@ -104,6 +106,7 @@ export default function StockView({
   // Add / Edit Modal State
   const [formOpen, setFormOpen] = useState(false);
   const [editingPhone, setEditingPhone] = useState<Phone | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // Sell Modal State
   const [sellModalOpen, setSellModalOpen] = useState(false);
@@ -752,7 +755,7 @@ export default function StockView({
                   <input
                     type="text"
                     required
-                    placeholder="ဥပမာ - Apple၊ Samsung"
+                    placeholder="Eg - Apple, Samsung"
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
@@ -767,7 +770,7 @@ export default function StockView({
                   <input
                     type="text"
                     required
-                    placeholder="ဥပမာ - iPhone 15 Pro"
+                    placeholder="Eg - iPhone 15 Pro"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
@@ -783,7 +786,7 @@ export default function StockView({
                   </label>
                   <input
                     type="text"
-                    placeholder="ဥပမာ - Black"
+                    placeholder="Eg - Black"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100"
@@ -797,7 +800,7 @@ export default function StockView({
                   </label>
                   <input
                     type="text"
-                    placeholder="ဥပမာ - 8GB"
+                    placeholder="Eg - 8GB"
                     value={ram}
                     onChange={(e) => setRam(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 font-mono"
@@ -811,7 +814,7 @@ export default function StockView({
                   </label>
                   <input
                     type="text"
-                    placeholder="ဥပမာ - 256GB"
+                    placeholder="Eg - 256GB"
                     value={storage}
                     onChange={(e) => setStorage(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 font-mono"
@@ -821,17 +824,30 @@ export default function StockView({
 
               {/* IMEI */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
-                  IMEI ဘားကုဒ် *
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5 flex justify-between items-center">
+                  <span>IMEI ဘားကုဒ် *</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ဂဏန်း/စာလုံးများ (တန်ဖိုးမတူညီရပါ)"
-                  value={imei}
-                  onChange={(e) => setImei(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 font-mono"
-                />
+                <div className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      required
+                      placeholder="ဂဏန်း/စာလုံးများ (တန်ဖိုးမတူညီရပါ)"
+                      value={imei}
+                      onChange={(e) => setImei(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 focus:bg-white dark:bg-slate-800/30 dark:focus:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-slate-900 dark:text-slate-100 font-mono"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="px-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-950/80 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm text-xs font-bold shrink-0"
+                    title="Scan Barcode"
+                  >
+                    <Camera className="h-4.5 w-4.5" />
+                    <span>Scan ဖတ်မည်</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -960,6 +976,14 @@ export default function StockView({
         }}
         onConfirm={handleSellConfirm}
       />
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onScanSuccess={(scannedImei) => setImei(scannedImei)}
+          onClose={() => setScannerOpen(false)}
+          onTriggerToast={onTriggerToast}
+        />
+      )}
 
       {/* Detail Pop-up Modal */}
       {selectedDetailPhone && (
