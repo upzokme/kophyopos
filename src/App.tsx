@@ -282,6 +282,7 @@ export default function App() {
                 setActiveTab("stock");
                 setAutoOpenAddPhone(true);
               }}
+              phones={phones}
             />
           )}
 

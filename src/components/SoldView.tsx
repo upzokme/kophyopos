@@ -142,6 +142,10 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
     return filteredSales.reduce((sum, s) => sum + s.sellingPrice, 0);
   }, [filteredSales]);
 
+  const totalCost = useMemo(() => {
+    return filteredSales.reduce((sum, s) => sum + (s.buyPrice || 0), 0);
+  }, [filteredSales]);
+
   return (
     <div className="space-y-6 font-sans">
       {/* Title block */}
@@ -153,8 +157,11 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">ရောင်းပြီးသမျှ ဖုန်းအရေအတွက်</span>
-          <span className="text-2xl font-extrabold text-slate-900 dark:text-white font-display mt-2">{toMyanmarDigits(filteredSales.length)} လုံး</span>
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">ရောင်းပြီးသမျှ ဖုန်းအရေအတွက်</span>
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-white font-display mt-2">{toMyanmarDigits(filteredSales.length)} လုံး</span>
+          </div>
+          <span className="text-xs text-slate-400 dark:text-slate-500 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 block">ဝယ်ရင်းဈေး အရင်းတန်ဖိုး: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatKyat(totalCost)}</span></span>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
           <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">စုစုပေါင်း ရောင်းရငွေ</span>

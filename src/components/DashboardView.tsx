@@ -22,7 +22,7 @@ import {
   BarChart3,
   Award,
 } from "lucide-react";
-import { DashboardStats, Sale } from "../types.js";
+import { DashboardStats, Sale, Phone } from "../types.js";
 import { formatKyat, formatBurmeseDate, toMyanmarDigits } from "../utils.js";
 
 interface DashboardViewProps {
@@ -30,10 +30,26 @@ interface DashboardViewProps {
   recentSales: (Sale & { brand: string; model: string; color: string; imei: string })[];
   setActiveTab: (tab: string) => void;
   onAddPhoneClick: () => void;
+  phones: Phone[];
 }
 
-export default function DashboardView({ stats, recentSales, setActiveTab, onAddPhoneClick }: DashboardViewProps) {
+export default function DashboardView({ stats, recentSales, setActiveTab, onAddPhoneClick, phones }: DashboardViewProps) {
   const [hoveredBrandIndex, setHoveredBrandIndex] = useState<number | null>(null);
+
+  // Total buying price (cost) value of all registered phones in the system
+  const totalPhonesCost = useMemo(() => {
+    return phones.reduce((sum, p) => sum + (p.buyPrice || 0), 0);
+  }, [phones]);
+
+  // Total buying price (cost) of all sold phones
+  const soldPhonesCost = useMemo(() => {
+    return phones.filter((p) => p.status === "Sold").reduce((sum, p) => sum + (p.buyPrice || 0), 0);
+  }, [phones]);
+
+  // Total profit of all sales
+  const totalSalesProfit = useMemo(() => {
+    return recentSales.reduce((sum, s) => sum + (s.profit || 0), 0);
+  }, [recentSales]);
 
   // Group sales chronologically by month
   const monthlyData = useMemo(() => {
@@ -254,7 +270,7 @@ export default function DashboardView({ stats, recentSales, setActiveTab, onAddP
       value: `${toMyanmarDigits(stats.totalPhones)} လုံး`,
       icon: Smartphone,
       color: "bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400",
-      description: "စာရင်းသွင်းထားသမျှ ဖုန်းစုစုပေါင်း",
+      description: `စုစုပေါင်း အရင်းငွေတန်ဖိုး: ${formatKyat(totalPhonesCost)}`,
       tab: "stock",
     },
     {
@@ -262,7 +278,7 @@ export default function DashboardView({ stats, recentSales, setActiveTab, onAddP
       value: `${toMyanmarDigits(stats.soldPhones)} လုံး`,
       icon: ShoppingBag,
       color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400",
-      description: "အောင်မြင်စွာ ရောင်းချပြီးစီးမှုများ",
+      description: `ရောင်းပြီး အရင်းငွေ: ${formatKyat(soldPhonesCost)} | အမြတ်ငွေ: ${formatKyat(totalSalesProfit)}`,
       tab: "sold",
     },
     {
