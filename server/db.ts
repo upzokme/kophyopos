@@ -167,27 +167,11 @@ class DatabaseManager {
         this.cache.sales = firestoreSales.sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
         this.saveToDisk(); // Update local backup file
       } else {
-        // Firestore is empty! Seed with initial database templates and sync to Cloud
-        console.log("Cloud Firestore is empty! Seeding and migrating data to Cloud Firestore...");
-        this.seedBurmeseMarketData();
-
-        const batch = writeBatch(firestoreDb);
-        this.cache.phones.forEach((phone) => {
-          const phoneRef = doc(firestoreDb, "phones", phone.id);
-          batch.set(phoneRef, cleanForFirestore(phone));
-        });
-
-        this.cache.sales.forEach((sale) => {
-          const saleRef = doc(firestoreDb, "sales", sale.id);
-          batch.set(saleRef, cleanForFirestore(sale));
-        });
-
-        try {
-          await batch.commit();
-          console.log("Seed data successfully uploaded to Cloud Firestore!");
-        } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, "batch_migration");
-        }
+        // Firestore is empty! Start with a fresh empty database
+        console.log("Cloud Firestore is empty. Ready for real user transactions!");
+        this.cache.phones = [];
+        this.cache.sales = [];
+        this.saveToDisk();
       }
     } catch (err) {
       console.error("Failed to sync with Firestore, running on local database fallback:", err);
