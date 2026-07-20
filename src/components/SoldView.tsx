@@ -686,7 +686,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (secPasswordInput === "#phyo2026@") {
+                if (secPasswordInput === "2510") {
                   const targetSaleId = secPasswordAction.saleId;
                   setSecPasswordAction(null);
                   setSecPasswordInput("");
