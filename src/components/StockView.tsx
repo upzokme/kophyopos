@@ -1019,7 +1019,7 @@ export default function StockView({
             <div className="p-6 space-y-4">
               {/* Brand & Model */}
               <div>
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widအတည်ပြုမည်1">
                   ဖုန်းအမျိုးအစားနှင့် စပက်များ
                 </span>
                 <div className="bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800/50 p-3 rounded-xl">
@@ -1165,7 +1165,7 @@ export default function StockView({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (secPasswordInput === "#phyo2026@") {
+                if (secPasswordInput === "2510") {
                   const targetPhone = secPasswordAction.phone;
                   const type = secPasswordAction.type;
                   setSecPasswordAction(null);
