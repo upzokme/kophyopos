@@ -122,6 +122,23 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
   // Pagination Logic
   const totalItems = filteredSales.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const visiblePages = useMemo(() => {
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = start + maxVisible - 1;
+
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    const pages = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
   const paginatedSales = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredSales.slice(start, start + itemsPerPage);
@@ -407,17 +424,17 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              {Array.from({ length: totalPages }).map((_, idx) => (
+              {visiblePages.map((page) => (
                 <button
-                  key={idx}
-                  onClick={() => handlePageChange(idx + 1)}
+                  key={page}
+                  onClick={() => handlePageChange(page)}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                    currentPage === idx + 1
+                    currentPage === page
                       ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                       : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
                   }`}
                 >
-                  {toMyanmarDigits(idx + 1)}
+                  {toMyanmarDigits(page)}
                 </button>
               ))}
               <button
@@ -686,7 +703,7 @@ export default function SoldView({ sales, onDeleteSale }: SoldViewProps) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (secPasswordInput === "2510") {
+                if (secPasswordInput === "#phyo2026@") {
                   const targetSaleId = secPasswordAction.saleId;
                   setSecPasswordAction(null);
                   setSecPasswordInput("");

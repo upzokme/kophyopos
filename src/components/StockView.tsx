@@ -319,6 +319,23 @@ export default function StockView({
   // Pagination Logic
   const totalItems = filteredAndSortedPhones.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const visiblePages = useMemo(() => {
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = start + maxVisible - 1;
+
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    const pages = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
   const paginatedPhones = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredAndSortedPhones.slice(start, start + itemsPerPage);
@@ -682,17 +699,17 @@ export default function StockView({
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              {Array.from({ length: totalPages }).map((_, idx) => (
+              {visiblePages.map((page) => (
                 <button
-                  key={idx}
-                  onClick={() => handlePageChange(idx + 1)}
+                  key={page}
+                  onClick={() => handlePageChange(page)}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                    currentPage === idx + 1
+                    currentPage === page
                       ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                       : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
                   }`}
                 >
-                  {toMyanmarDigits(idx + 1)}
+                  {toMyanmarDigits(page)}
                 </button>
               ))}
               <button
@@ -1019,7 +1036,7 @@ export default function StockView({
             <div className="p-6 space-y-4">
               {/* Brand & Model */}
               <div>
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widအတည်ပြုမည်1">
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                   ဖုန်းအမျိုးအစားနှင့် စပက်များ
                 </span>
                 <div className="bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800/50 p-3 rounded-xl">
@@ -1165,7 +1182,7 @@ export default function StockView({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (secPasswordInput === "2510") {
+                if (secPasswordInput === "#phyo2026@") {
                   const targetPhone = secPasswordAction.phone;
                   const type = secPasswordAction.type;
                   setSecPasswordAction(null);
