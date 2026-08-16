@@ -1182,7 +1182,7 @@ export default function StockView({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (secPasswordInput === "#phyo2026@") {
+                if (secPasswordInput === "2510") {
                   const targetPhone = secPasswordAction.phone;
                   const type = secPasswordAction.type;
                   setSecPasswordAction(null);
